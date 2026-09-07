@@ -17,8 +17,8 @@ export default function DoctorPortal({ doctor }) {
     setLoading(true);
     try {
 
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';  
-      const res = await fetch(`${API_BASE}5000/api/doctor/encounter/${targetToken}`);
+      const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`;  
+      const res = await fetch(`${API_BASE}/api/doctor/encounter/${targetToken}`);
       const result = await res.json();
       if (!result.success) throw new Error(result.message || 'Encounter record not found');
       setData(result.encounter);

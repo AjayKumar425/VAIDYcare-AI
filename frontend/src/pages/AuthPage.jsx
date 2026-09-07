@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-
+import { API_BASE } from '../utils/api';
 export default function AuthPage({ onLoginSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('PATIENT');
@@ -29,12 +29,12 @@ export default function AuthPage({ onLoginSuccess }) {
       : { ...formData, role };
 
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';  
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`;  
+      const res = await fetch(`${API_BASE}/api/auth/${isLogin ? 'login' : 'register'}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(formData)
+});
       const data = await res.json();
       if (!data.success) throw new Error(data.message || 'Authentication failed');
 

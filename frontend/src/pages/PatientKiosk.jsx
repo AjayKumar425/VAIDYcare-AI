@@ -89,11 +89,11 @@ export default function PatientKiosk({ user }) {
     });
 
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';  
-      const res = await fetch('${API_BASE}/api/intake/submit', {
+      const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`;  
+      const res = await fetch(`${API_BASE}/api/intake/submit`, {
         method: 'POST',
-        body: data
-      });
+          body: data
+        });
       const result = await res.json();
       if (result.success) setCompletedSession(result);
       else alert(result.error || 'Submission failed');
