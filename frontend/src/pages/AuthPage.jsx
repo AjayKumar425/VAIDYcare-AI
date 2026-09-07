@@ -28,14 +28,10 @@ export default function AuthPage({ onLoginSuccess }) {
       ? { email: formData.email, password: formData.password, role }
       : { ...formData, role };
 
-    // Clean URL construction
-    const base = (API_BASE || 'https://vaidycare-ai.onrender.com').replace(/\/+$/, '');
-    const endpoint = `${base}/api/auth/${isLogin ? 'login' : 'register'}`;
-
-    console.log('Sending request to endpoint:', endpoint);
+    const targetUrl = `https://vaidycare-ai.onrender.com/api/auth/${isLogin ? 'login' : 'register'}`;
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,14 +42,12 @@ export default function AuthPage({ onLoginSuccess }) {
 
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        const text = await res.text();
-        console.error('Non-JSON response received from server:', text);
-        throw new Error('Backend is currently waking up or URL is unreachable. Please wait 15-20 seconds and try again.');
+        throw new Error('Backend server is waking up. Please wait 10 seconds and try again.');
       }
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.message || data.error || 'Authentication failed');
+        throw new Error(data.message || data.error || 'Authentication failed. Check your credentials.');
       }
 
       localStorage.setItem('medikiosk_token', data.token);
@@ -67,8 +61,8 @@ export default function AuthPage({ onLoginSuccess }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50/50">
-      <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl shadow-slate-200/50 p-8 transition-all duration-300 hover:shadow-2xl">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900/5">
+      <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-8 transition-all">
         {/* Brand Header */}
         <div className="text-center mb-6">
           <div className="inline-flex w-12 h-12 rounded-2xl bg-gradient-to-tr from-clinical-600 to-brand-500 items-center justify-center shadow-lg shadow-clinical-500/30 text-white font-black font-heading text-2xl mb-3">
@@ -80,15 +74,13 @@ export default function AuthPage({ onLoginSuccess }) {
           <p className="text-xs font-medium text-slate-500 mt-1">Intelligent Clinical Intake & OPD Triage System</p>
         </div>
 
-        {/* Role Switcher */}
-        <div className="grid grid-cols-2 p-1 bg-slate-100/80 rounded-2xl mb-6 border border-slate-200/50">
+        {/* Role Toggle */}
+        <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl mb-6 border border-slate-200/60">
           <button
             type="button"
             onClick={() => setRole('PATIENT')}
-            className={`py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
-              role === 'PATIENT'
-                ? 'bg-white text-clinical-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+            className={`py-2 text-xs font-bold rounded-xl transition-all ${
+              role === 'PATIENT' ? 'bg-white text-clinical-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             Patient Kiosk
@@ -96,10 +88,8 @@ export default function AuthPage({ onLoginSuccess }) {
           <button
             type="button"
             onClick={() => setRole('DOCTOR')}
-            className={`py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
-              role === 'DOCTOR'
-                ? 'bg-white text-clinical-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+            className={`py-2 text-xs font-bold rounded-xl transition-all ${
+              role === 'DOCTOR' ? 'bg-white text-clinical-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             Doctor Desk
@@ -120,7 +110,7 @@ export default function AuthPage({ onLoginSuccess }) {
               <input
                 name="name"
                 required
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 outline-none"
                 placeholder="e.g. Rahul Sharma"
                 value={formData.name}
                 onChange={handleChange}
@@ -134,7 +124,7 @@ export default function AuthPage({ onLoginSuccess }) {
               name="email"
               type="email"
               required
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 outline-none"
               placeholder="name@hospital.org"
               value={formData.email}
               onChange={handleChange}
@@ -147,7 +137,7 @@ export default function AuthPage({ onLoginSuccess }) {
               name="password"
               type="password"
               required
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 outline-none"
               placeholder="••••••••"
               value={formData.password}
               onChange={handleChange}
@@ -161,7 +151,7 @@ export default function AuthPage({ onLoginSuccess }) {
                 <input
                   name="phone"
                   required
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
                   placeholder="+91 98765 43210"
                   value={formData.phone}
                   onChange={handleChange}
@@ -176,7 +166,7 @@ export default function AuthPage({ onLoginSuccess }) {
                       name="age"
                       type="number"
                       required
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
                       placeholder="28"
                       value={formData.age}
                       onChange={handleChange}
@@ -186,7 +176,7 @@ export default function AuthPage({ onLoginSuccess }) {
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Gender</label>
                     <select
                       name="gender"
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all font-semibold"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-semibold"
                       value={formData.gender}
                       onChange={handleChange}
                     >
@@ -203,8 +193,8 @@ export default function AuthPage({ onLoginSuccess }) {
                     <input
                       name="specialization"
                       required
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
-                      placeholder="e.g. General Physician / Ayush"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                      placeholder="e.g. General Physician"
                       value={formData.specialization}
                       onChange={handleChange}
                     />
@@ -214,7 +204,7 @@ export default function AuthPage({ onLoginSuccess }) {
                     <input
                       name="licenseNumber"
                       required
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 outline-none transition-all"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
                       placeholder="MCI-19482-A"
                       value={formData.licenseNumber}
                       onChange={handleChange}
@@ -228,7 +218,7 @@ export default function AuthPage({ onLoginSuccess }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 hover:from-clinical-700 hover:to-brand-700 text-white font-black text-sm shadow-md shadow-clinical-500/20 hover:shadow-lg hover:shadow-clinical-500/30 transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full mt-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 hover:from-clinical-700 hover:to-brand-700 text-white font-black text-sm shadow-md shadow-clinical-500/20 hover:shadow-lg transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
               <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
