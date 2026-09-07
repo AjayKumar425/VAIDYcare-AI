@@ -284,6 +284,53 @@ export default function DoctorPortal({ doctor }) {
               )}
             </div>
           </div>
+          {/* Structured SOCRATES Clinical History */}
+{session.structured_hpi && (
+  <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
+    <div className="flex items-center justify-between mb-3">
+      <span className="text-[11px] font-black text-clinical-600 uppercase tracking-wider">
+        Structured HPI (SOCRATES Framework)
+      </span>
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 uppercase text-slate-700">
+        Mode: {session.care_mode || 'General'}
+      </span>
+    </div>
+    
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+        <span className="text-[10px] text-slate-400 block font-bold uppercase">Onset</span>
+        <span className="font-extrabold text-slate-800">{session.structured_hpi.history_of_present_illness?.onset || 'N/A'}</span>
+      </div>
+      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+        <span className="text-[10px] text-slate-400 block font-bold uppercase">Character</span>
+        <span className="font-extrabold text-slate-800">{session.structured_hpi.history_of_present_illness?.character || 'N/A'}</span>
+      </div>
+      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+        <span className="text-[10px] text-slate-400 block font-bold uppercase">Severity</span>
+        <span className="font-extrabold text-slate-800">{session.structured_hpi.history_of_present_illness?.severity || 'N/A'}</span>
+      </div>
+      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+        <span className="text-[10px] text-slate-400 block font-bold uppercase">Past History</span>
+        <span className="font-extrabold text-slate-800">{session.structured_hpi.past_medical_history || 'None'}</span>
+      </div>
+    </div>
+
+    {/* AYUSH Dashavidha Factors if present */}
+    {session.structured_hpi.ayush_dashavidha && (
+      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2 text-xs">
+        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+          🌿 Prakriti: {session.structured_hpi.ayush_dashavidha.prakriti}
+        </span>
+        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+          🔥 Agni: {session.structured_hpi.ayush_dashavidha.agni}
+        </span>
+        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+          🌀 Koshtha: {session.structured_hpi.ayush_dashavidha.koshtha}
+        </span>
+      </div>
+    )}
+  </div>
+)}
 
           {/* Diagnostic Document Cards */}
           <div>

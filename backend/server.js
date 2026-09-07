@@ -4,10 +4,9 @@ const path = require('path');
 require('dotenv').config();
 
 const connectDB = require('./config/db');
+const authRoutes = require('./routes/authRoutes');
 const intakeRoutes = require('./routes/intakeRoutes');
 const doctorRoutes = require('./routes/doctorRoutes');
-const authRoutes = require('./routes/authRoutes');
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -29,7 +28,15 @@ app.use('/api/intake', intakeRoutes);
 app.use('/api/doctor', doctorRoutes);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'VAIDYcare-AI Gateway Running with Gemini 3.6 Multimodal' });
+  res.status(200).json({
+    status: 'OK',
+    service: 'VAIDYcare-AI Gateway',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/', (req, res) => {
+  res.status(200).send('VAIDYcare-AI Backend is Live');
 });
 
 app.listen(PORT, () => {

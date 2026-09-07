@@ -38,6 +38,8 @@ const DocumentSchema = new mongoose.Schema({
   created_at: { type: Date, default: Date.now }
 });
 
+// In backend/models/Encounter.js
+// Add these fields to EncounterSchema:
 const EncounterSchema = new mongoose.Schema({
   token_number: { type: String, required: true, unique: true },
   patient: {
@@ -47,8 +49,11 @@ const EncounterSchema = new mongoose.Schema({
     phone: { type: String, required: true },
     abha_id: { type: String, default: null }
   },
+  care_mode: { type: String, enum: ['general', 'ayush'], default: 'general' },
   chief_complaint: { type: String, required: true },
   symptoms: [{ type: String }],
+  interview_answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+  structured_hpi: { type: mongoose.Schema.Types.Mixed, default: {} },
   triage_summary: {
     risk_level: { type: String, enum: ['SAFE', 'MODERATE', 'SEVERE'], default: 'SAFE' },
     risk_score: { type: Number, default: 10 },
@@ -61,6 +66,7 @@ const EncounterSchema = new mongoose.Schema({
       }
     ],
     highlighted_keywords: [{ type: String }],
+    red_flags: [{ type: String }],
     clinical_note: { type: String, default: '' }
   },
   documents: [DocumentSchema],
