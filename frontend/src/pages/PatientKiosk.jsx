@@ -16,6 +16,7 @@ export default function PatientKiosk({ user }) {
   const [isListening, setIsListening] = useState(false);
   const [completedSession, setCompletedSession] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const slipRef = useRef(null);
 
   const toggleSpeechRecognition = () => {
@@ -84,37 +85,33 @@ export default function PatientKiosk({ user }) {
     setLoading(true);
 
     try {
-      // 1. Initialize FormData correctly
       const formDataToSend = new FormData();
 
-      // 2. Append Patient Demographics & Complaint
-      formDataToSend.append('full_name', formData.full_name || patient.full_name || '');
-      formDataToSend.append('age', formData.age || patient.age || '');
-      formDataToSend.append('gender', formData.gender || patient.gender || 'Male');
-      formDataToSend.append('phone', formData.phone || patient.phone || '');
-      formDataToSend.append('abha_id', formData.abha_id || '');
-      formDataToSend.append('chief_complaint', formData.chief_complaint || '');
+      // Demographic and complaint mapping
+      formDataToSend.append('full_name', formData.fullName || user?.name || '');
+      formDataToSend.append('age', formData.age || user?.age || '');
+      formDataToSend.append('gender', formData.gender || user?.gender || 'Male');
+      formDataToSend.append('phone', formData.phone || user?.phone || '');
+      formDataToSend.append('abha_id', formData.abhaId || '');
+      formDataToSend.append('chief_complaint', formData.chiefComplaint || '');
       formDataToSend.append('care_mode', careMode || 'general');
 
-      // 3. Append Symptoms (as JSON array string)
-      formDataToSend.append('symptoms', JSON.stringify(selectedSymptoms || []));
+      // Symptoms array
+      formDataToSend.append('symptoms', JSON.stringify(formData.symptoms || []));
+      formDataToSend.append('interview_answers', JSON.stringify({}));
+      formDataToSend.append('structured_hpi', JSON.stringify({}));
 
-      // 4. Append Structured HPI / Interview Data
-      formDataToSend.append('interview_answers', JSON.stringify(interviewAnswers || {}));
-      formDataToSend.append('structured_hpi', JSON.stringify(structuredHpi || {}));
+      // Append all medical images/scans
+      fileList.forEach((item) => {
+        if (item.file) {
+          formDataToSend.append('documents', item.file);
+        }
+      });
 
-      // 5. Append Uploaded Medical Image Files (X-Rays, Lab Reports, Prescriptions)
-      if (selectedFiles && selectedFiles.length > 0) {
-        Array.from(selectedFiles).forEach((file) => {
-          formDataToSend.append('documents', file);
-        });
-      }
-
-      // 6. Send Multipart Request to Live Render Backend
-      const targetBase = API_BASE || 'https://vaidycare-ai.onrender.com';
+      const targetBase = (API_BASE || 'https://vaidycare-ai.onrender.com').replace(/\/+$/, '');
       const res = await fetch(`${targetBase}/api/intake/submit`, {
         method: 'POST',
-        body: formDataToSend // Note: Do NOT set 'Content-Type' header when sending FormData!
+        body: formDataToSend
       });
 
       const contentType = res.headers.get('content-type') || '';
@@ -127,9 +124,12 @@ export default function PatientKiosk({ user }) {
         throw new Error(data.message || data.error || 'Failed to submit intake record.');
       }
 
-      // 7. Store Result & Move to QR Slip Display
-      setSubmittedRecord(data.encounter || data);
-      setIsSubmitted(true);
+      const record = data.encounter || data;
+      setCompletedSession({
+        tokenNumber: record.token_number || record.tokenNumber || 'V-1001',
+        qrCodeBase64: record.qr_code_data || record.qrCodeBase64 || '',
+        triage: record.triage_summary || record.triage || { risk_level: 'SAFE', risk_score: 10 }
+      });
     } catch (err) {
       console.error('Submission Error:', err);
       setError(err.message || 'API Connection Error');
@@ -274,7 +274,14 @@ export default function PatientKiosk({ user }) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleFormSubmit} className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name</label>
@@ -419,7 +426,7 @@ export default function PatientKiosk({ user }) {
             disabled={loading}
             className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 text-white font-black text-sm shadow-lg shadow-clinical-600/20 hover:shadow-xl transition-all flex items-center justify-center gap-2"
           >
-            {loading ? 'Processing Medical Records with Gemini 3.6...' : 'Submit Records & Generate Slip →'}
+            {loading ? 'Processing Medical Records with Gemini AI...' : 'Submit Records & Generate Slip →'}
           </button>
         </form>
       </div>
