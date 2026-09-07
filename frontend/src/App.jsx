@@ -3,11 +3,19 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import PatientKiosk from './pages/PatientKiosk';
 import DoctorPortal from './pages/DoctorPortal';
+import LiveQueueDisplay from './pages/LiveQueueDisplay';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [authModalRole, setAuthModalRole] = useState(null); // 'PATIENT' | 'DOCTOR' | null
   const [authChecked, setAuthChecked] = useState(false);
+
+  const isQueueScreen = window.location.search.includes('view=queue') || window.location.hash === '#queue';
+
+if (isQueueScreen) {
+  return <LiveQueueDisplay />;
+}
+  
 
   useEffect(() => {
     try {

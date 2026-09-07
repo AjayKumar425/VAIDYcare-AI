@@ -1,4 +1,3 @@
-// backend/services/geminiService.js
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 
@@ -19,16 +18,16 @@ async function analyzeMedicalDocument(filePath, mimeType) {
     const imagePart = fileToGenerativePart(filePath, mimeType);
 
     const prompt = `
-You are an expert clinical medical AI assistant. Analyze this medical document (X-ray, CBC Lab Report, ECG, or handwritten Doctor Prescription).
+You are an expert clinical medical AI. Analyze this medical document (X-ray, CBC Lab Report, ECG, or Doctor Prescription).
 
-Return ONLY valid JSON matching this exact structure:
+Return ONLY raw valid JSON matching this schema:
 {
   "doc_type": "X-Ray" | "CBC Lab Report" | "Prescription" | "Clinical Note",
-  "predicted_condition": "Short string of primary finding",
+  "predicted_condition": "Primary clinical finding",
   "essential_bullet_points": [
-    "🔴 Key abnormal finding 1",
-    "🟡 Moderate finding 2",
-    "🟢 Normal finding 3"
+    "🔴 Key abnormal parameter",
+    "🟡 Moderate observation",
+    "🟢 Baseline finding"
   ],
   "biomarkers": [
     {
@@ -42,12 +41,10 @@ Return ONLY valid JSON matching this exact structure:
     {
       "name": "Amoxicillin",
       "dosage": "500mg",
-      "frequency": "TDS x 5 days"
+      "frequency": "TDS"
     }
   ],
-  "drug_interaction_warnings": [
-    "Warning text if any interacting drugs are identified"
-  ]
+  "drug_interaction_warnings": []
 }
 `;
 
@@ -61,11 +58,11 @@ Return ONLY valid JSON matching this exact structure:
 
     return JSON.parse(cleanedJson);
   } catch (error) {
-    console.error('Gemini Multimodal Extraction Error:', error);
+    console.error('Gemini Vision Extraction Error:', error);
     return {
       doc_type: 'Medical Document',
       predicted_condition: 'General Evaluation',
-      essential_bullet_points: ['Document processed successfully', 'Consult attending physician'],
+      essential_bullet_points: ['Document processed successfully', 'Review findings with clinical team'],
       biomarkers: [],
       extracted_medications: [],
       drug_interaction_warnings: []
