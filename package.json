@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "framer-motion": "^13.2.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.42.0"
+  }
+}

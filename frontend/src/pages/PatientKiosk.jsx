@@ -1,4 +1,15 @@
 import React, { useState, useRef } from 'react';
+import { 
+  Mic, 
+  Globe, 
+  Upload, 
+  X, 
+  Printer, 
+  RotateCcw, 
+  AlertCircle, 
+  CheckCircle2, 
+  Sparkles 
+} from 'lucide-react';
 import { API_BASE } from '../utils/api';
 
 export default function PatientKiosk({ user }) {
@@ -13,6 +24,7 @@ export default function PatientKiosk({ user }) {
   });
   const [careMode, setCareMode] = useState('general');
   const [fileList, setFileList] = useState([]);
+  const [voiceLang, setVoiceLang] = useState('en-IN'); // 'en-IN' | 'hi-IN'
   const [isListening, setIsListening] = useState(false);
   const [completedSession, setCompletedSession] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -22,19 +34,23 @@ export default function PatientKiosk({ user }) {
   const toggleSpeechRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Voice dictation is supported on Chrome & Edge.');
+      alert('Voice dictation is supported on Google Chrome & Microsoft Edge browsers.');
       return;
     }
     if (isListening) {
       setIsListening(false);
       return;
     }
+
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN';
+    recognition.lang = voiceLang;
     recognition.continuous = false;
+    recognition.interimResults = false;
+
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
     recognition.onerror = () => setIsListening(false);
+
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript;
       setFormData((prev) => ({
@@ -42,6 +58,7 @@ export default function PatientKiosk({ user }) {
         chiefComplaint: prev.chiefComplaint ? `${prev.chiefComplaint} ${transcript}` : transcript
       }));
     };
+
     recognition.start();
   };
 
@@ -87,7 +104,6 @@ export default function PatientKiosk({ user }) {
     try {
       const formDataToSend = new FormData();
 
-      // Demographic and complaint mapping
       formDataToSend.append('full_name', formData.fullName || user?.name || '');
       formDataToSend.append('age', formData.age || user?.age || '');
       formDataToSend.append('gender', formData.gender || user?.gender || 'Male');
@@ -96,12 +112,10 @@ export default function PatientKiosk({ user }) {
       formDataToSend.append('chief_complaint', formData.chiefComplaint || '');
       formDataToSend.append('care_mode', careMode || 'general');
 
-      // Symptoms array
       formDataToSend.append('symptoms', JSON.stringify(formData.symptoms || []));
       formDataToSend.append('interview_answers', JSON.stringify({}));
       formDataToSend.append('structured_hpi', JSON.stringify({}));
 
-      // Append all medical images/scans
       fileList.forEach((item) => {
         if (item.file) {
           formDataToSend.append('documents', item.file);
@@ -155,7 +169,7 @@ export default function PatientKiosk({ user }) {
           <div className="flex items-center justify-between pb-4 border-b-2 border-dashed border-slate-200">
             <div>
               <h2 className="text-xl font-black font-heading text-slate-900 tracking-tight">
-                VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span>
+                VAIDY<span className="text-cyan-600">care</span><span className="text-teal-600">-AI</span>
               </h2>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 Official OPD Appointment Slip
@@ -167,7 +181,7 @@ export default function PatientKiosk({ user }) {
           </div>
 
           <div className="my-5 p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center">
-            <span className="text-[10px] font-extrabold text-clinical-600 tracking-widest uppercase">
+            <span className="text-[10px] font-extrabold text-cyan-600 tracking-widest uppercase">
               Queue Token Number
             </span>
             <div className="text-4xl font-black font-heading text-slate-900 tracking-tight my-1">
@@ -226,15 +240,17 @@ export default function PatientKiosk({ user }) {
         <div className="flex gap-3 mt-4">
           <button
             onClick={handlePrintSlip}
-            className="flex-1 py-3 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/20 transition-all flex items-center justify-center gap-1.5"
+            className="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black shadow-md shadow-cyan-500/20 transition-all flex items-center justify-center gap-1.5"
           >
-            🖨️ Download / Print Slip
+            <Printer className="w-4 h-4" />
+            <span>Download Slip</span>
           </button>
           <button
             onClick={() => window.location.reload()}
-            className="flex-1 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-md"
+            className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
           >
-            New Check-In
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>New Check-In</span>
           </button>
         </div>
       </div>
@@ -243,21 +259,25 @@ export default function PatientKiosk({ user }) {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 mb-6">
+      <div className="bg-slate-900/90 backdrop-blur-xl rounded-3xl border border-slate-800 shadow-2xl p-6 sm:p-10">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800 mb-6">
           <div>
-            <span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">Patient Self-Kiosk</span>
-            <h1 className="text-2xl sm:text-3xl font-black font-heading text-slate-900 tracking-tight mt-0.5">
-              VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span> Check-In
+            <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Patient Self-Kiosk
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-black font-heading text-white tracking-tight mt-0.5">
+              VAIDY<span className="text-cyan-400">care</span><span className="text-teal-400">-AI</span> Check-In
             </h1>
           </div>
           
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+          <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-2xl border border-slate-800">
             <button
               type="button"
               onClick={() => setCareMode('general')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                careMode === 'general' ? 'bg-white text-clinical-700 shadow-sm' : 'text-slate-500'
+                careMode === 'general' ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
               General OPD
@@ -266,7 +286,7 @@ export default function PatientKiosk({ user }) {
               type="button"
               onClick={() => setCareMode('ayush')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                careMode === 'ayush' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500'
+                careMode === 'ayush' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
               🌿 AYUSH
@@ -275,8 +295,8 @@ export default function PatientKiosk({ user }) {
         </div>
 
         {error && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
-            <span>⚠️</span>
+          <div className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
@@ -284,23 +304,23 @@ export default function PatientKiosk({ user }) {
         <form onSubmit={handleFormSubmit} className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Full Name</label>
               <input
                 required
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 outline-none transition-all"
+                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-700 bg-slate-950 text-white placeholder-slate-500 focus:border-cyan-400 outline-none transition-all"
                 placeholder="Patient Full Name"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Age</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Age</label>
               <input
                 type="number"
                 required
                 value={formData.age}
                 onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-clinical-500/20 outline-none transition-all"
+                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-700 bg-slate-950 text-white placeholder-slate-500 focus:border-cyan-400 outline-none transition-all"
                 placeholder="Years"
               />
             </div>
@@ -308,57 +328,77 @@ export default function PatientKiosk({ user }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Gender</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Gender</label>
               <select
                 value={formData.gender}
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white outline-none"
+                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-700 bg-slate-950 text-white focus:border-cyan-400 outline-none font-semibold"
               >
-                <option>Male</option>
-                <option>Female</option>
-                <option>Other</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone Number</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Phone Number</label>
               <input
                 type="tel"
                 required
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white outline-none"
+                className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-700 bg-slate-950 text-white placeholder-slate-500 focus:border-cyan-400 outline-none transition-all"
                 placeholder="+91 9876543210"
               />
             </div>
           </div>
 
+          {/* Chief Complaint & Multilingual Voice Input */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-700">Primary Complaint</label>
-              <button
-                type="button"
-                onClick={toggleSpeechRecognition}
-                className={`text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 transition-all ${
-                  isListening
-                    ? 'bg-rose-500 text-white animate-pulse'
-                    : 'bg-clinical-50 text-clinical-700 hover:bg-clinical-100 border border-clinical-200'
-                }`}
-              >
-                <span>{isListening ? '🔴 Listening...' : '🎤 Voice Input'}</span>
-              </button>
+              <label className="text-xs font-bold text-slate-300">Primary Complaint</label>
+              
+              {/* Dual Language & Voice Dictation Controls */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-950 border border-slate-700 px-2 py-1 rounded-xl">
+                  <Globe className="w-3 h-3 text-slate-400" />
+                  <select
+                    value={voiceLang}
+                    onChange={(e) => setVoiceLang(e.target.value)}
+                    className="bg-transparent text-[11px] font-bold text-slate-200 outline-none cursor-pointer"
+                  >
+                    <option value="en-IN" className="bg-slate-900 text-white">English (IN)</option>
+                    <option value="hi-IN" className="bg-slate-900 text-white">हिंदी (Hindi)</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleSpeechRecognition}
+                  className={`text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1.5 transition-all ${
+                    isListening
+                      ? 'bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/40'
+                      : 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/20'
+                  }`}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>{isListening ? 'Listening...' : 'Voice Dictate'}</span>
+                </button>
+              </div>
             </div>
+
             <textarea
               required
-              rows={2}
+              rows={3}
               value={formData.chiefComplaint}
               onChange={(e) => setFormData({ ...formData, chiefComplaint: e.target.value })}
-              className="w-full p-3.5 text-sm rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white outline-none resize-none"
-              placeholder="Describe symptoms or tap the voice button..."
+              className="w-full p-3.5 text-sm rounded-2xl border border-slate-700 bg-slate-950 text-white placeholder-slate-500 focus:border-cyan-400 outline-none resize-none transition-all"
+              placeholder="Describe symptoms or switch language to speak your complaint in English or Hindi..."
             />
           </div>
 
+          {/* Observable Symptoms */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">Observable Symptoms</label>
+            <label className="block text-xs font-bold text-slate-300 mb-2">Observable Symptoms</label>
             <div className="flex flex-wrap gap-2">
               {symptomOptions.map(({ label, icon }) => {
                 const selected = formData.symptoms.includes(label);
@@ -367,10 +407,10 @@ export default function PatientKiosk({ user }) {
                     type="button"
                     key={label}
                     onClick={() => toggleSymptom(label)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
                       selected
-                        ? 'bg-clinical-600 text-white border-clinical-600 shadow-sm'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        ? 'bg-cyan-500 text-slate-950 border-cyan-500 font-bold shadow-md shadow-cyan-500/20'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                     }`}
                   >
                     <span>{icon}</span>
@@ -383,28 +423,28 @@ export default function PatientKiosk({ user }) {
 
           {/* Multi-Image Upload Card */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
               Medical Scans & Lab Reports (X-Rays, CBC, Handwritten Prescriptions)
             </label>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {fileList.map((item, idx) => (
-                <div key={idx} className="relative group rounded-2xl border border-slate-200 overflow-hidden bg-slate-100 aspect-square shadow-sm">
+                <div key={idx} className="relative group rounded-2xl border border-slate-700 overflow-hidden bg-slate-950 aspect-square shadow-sm">
                   <img src={item.preview} alt="Upload preview" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => removeFile(idx)}
-                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-bold shadow-md hover:bg-rose-700"
+                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-bold shadow-md hover:bg-rose-700 transition-colors"
                   >
-                    ✕
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                  <div className="absolute bottom-0 inset-x-0 bg-black/60 px-2 py-1 text-[10px] text-white truncate text-center">
+                  <div className="absolute bottom-0 inset-x-0 bg-slate-950/80 px-2 py-1 text-[10px] text-white truncate text-center backdrop-blur-sm">
                     {item.name}
                   </div>
                 </div>
               ))}
 
-              <label className="border-2 border-dashed border-clinical-300 hover:border-clinical-500 bg-clinical-50/40 hover:bg-clinical-50/80 rounded-2xl flex flex-col items-center justify-center cursor-pointer aspect-square transition-all group">
+              <label className="border-2 border-dashed border-slate-700 hover:border-cyan-400 bg-slate-950/50 hover:bg-slate-950 rounded-2xl flex flex-col items-center justify-center cursor-pointer aspect-square transition-all group">
                 <input
                   type="file"
                   multiple
@@ -412,11 +452,11 @@ export default function PatientKiosk({ user }) {
                   onChange={handleAddFiles}
                   className="hidden"
                 />
-                <div className="w-10 h-10 rounded-full bg-clinical-600 text-white flex items-center justify-center text-2xl font-bold shadow-md group-hover:scale-110 transition-transform">
-                  +
+                <div className="w-10 h-10 rounded-xl bg-slate-800 text-cyan-400 flex items-center justify-center text-xl font-bold shadow-md group-hover:bg-cyan-500 group-hover:text-slate-950 transition-all">
+                  <Upload className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-bold text-clinical-700 mt-2">Add Image</span>
-                <span className="text-[10px] text-slate-400">Multi-upload</span>
+                <span className="text-xs font-bold text-slate-300 mt-2">Add Files</span>
+                <span className="text-[10px] text-slate-500">Multi-upload</span>
               </label>
             </div>
           </div>
@@ -424,9 +464,16 @@ export default function PatientKiosk({ user }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 text-white font-black text-sm shadow-lg shadow-clinical-600/20 hover:shadow-xl transition-all flex items-center justify-center gap-2"
+            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:scale-[1.01] transition-all flex items-center justify-center gap-2"
           >
-            {loading ? 'Processing Medical Records with Gemini AI...' : 'Submit Records & Generate Slip →'}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                Processing Records with Gemini Vision AI...
+              </span>
+            ) : (
+              'Submit Records & Generate Queue Slip →'
+            )}
           </button>
         </form>
       </div>
