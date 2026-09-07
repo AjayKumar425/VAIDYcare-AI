@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { API_BASE } from '../utils/api';
 
 export default function PatientKiosk({ user }) {
   const [formData, setFormData] = useState({
@@ -10,6 +11,7 @@ export default function PatientKiosk({ user }) {
     chiefComplaint: '',
     symptoms: []
   });
+  const [careMode, setCareMode] = useState('general');
   const [fileList, setFileList] = useState([]);
   const [isListening, setIsListening] = useState(false);
   const [completedSession, setCompletedSession] = useState(null);
@@ -19,7 +21,7 @@ export default function PatientKiosk({ user }) {
   const toggleSpeechRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Voice dictation is supported on Google Chrome & Microsoft Edge.');
+      alert('Voice dictation is supported on Chrome & Edge.');
       return;
     }
     if (isListening) {
@@ -84,19 +86,19 @@ export default function PatientKiosk({ user }) {
       if (k === 'symptoms') data.append(k, JSON.stringify(formData[k]));
       else data.append(k, formData[k]);
     });
+    data.append('careMode', careMode);
     fileList.forEach((item) => {
       data.append('documents', item.file);
     });
 
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`;  
       const res = await fetch(`${API_BASE}/api/intake/submit`, {
         method: 'POST',
-          body: data
-        });
+        body: data
+      });
       const result = await res.json();
       if (result.success) setCompletedSession(result);
-      else alert(result.error || 'Submission failed');
+      else alert(result.error || result.message || 'Submission failed');
     } catch (err) {
       alert('API Connection Error: ' + err.message);
     } finally {
@@ -113,34 +115,30 @@ export default function PatientKiosk({ user }) {
 
     return (
       <div className="max-w-md mx-auto my-6">
-        {/* Printable OPD Token Receipt */}
         <div
           ref={slipRef}
           id="printable-slip"
           className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-slate-300 shadow-2xl text-slate-800 relative overflow-hidden"
         >
-          {/* Header watermark */}
-          // 1. In the Main Form Header:
-<h1 className="text-2xl sm:text-3xl font-black font-heading text-slate-900 tracking-tight mt-0.5">
-  VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span> Check-In
-</h1>
+          <div className="flex items-center justify-between pb-4 border-b-2 border-dashed border-slate-200">
+            <div>
+              <h2 className="text-xl font-black font-heading text-slate-900 tracking-tight">
+                VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span>
+              </h2>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Official OPD Appointment Slip
+              </p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-1 bg-slate-100 rounded text-slate-600">
+              {new Date().toLocaleDateString()}
+            </span>
+          </div>
 
-// 2. In the Printable Slip (slipRef / printable-slip):
-<div>
-  <h2 className="text-xl font-black font-heading text-slate-900 tracking-tight">
-    VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span>
-  </h2>
-  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-    Official OPD Appointment Slip
-  </p>
-</div>
-
-          {/* Token Display Box */}
           <div className="my-5 p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center">
             <span className="text-[10px] font-extrabold text-clinical-600 tracking-widest uppercase">
               Queue Token Number
             </span>
-            <div className="text-4xl font-black text-slate-900 tracking-tight my-1">
+            <div className="text-4xl font-black font-heading text-slate-900 tracking-tight my-1">
               {completedSession.tokenNumber}
             </div>
             <span
@@ -156,7 +154,6 @@ export default function PatientKiosk({ user }) {
             </span>
           </div>
 
-          {/* Patient Details */}
           <div className="space-y-1.5 text-xs border-y border-slate-100 py-3 mb-4">
             <div className="flex justify-between">
               <span className="text-slate-400 font-semibold">Patient Name:</span>
@@ -171,12 +168,11 @@ export default function PatientKiosk({ user }) {
               <span className="font-bold text-slate-800">{formData.phone}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400 font-semibold">Chief Complaint:</span>
-              <span className="font-bold text-slate-800 truncate max-w-[200px]">{formData.chiefComplaint}</span>
+              <span className="text-slate-400 font-semibold">Care Mode:</span>
+              <span className="font-bold text-slate-800 uppercase">{careMode}</span>
             </div>
           </div>
 
-          {/* Scannable QR Code */}
           <div className="text-center">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
               Scan at Doctor Desk
@@ -191,11 +187,10 @@ export default function PatientKiosk({ user }) {
           </div>
 
           <p className="text-[9px] text-center text-slate-400 mt-4 leading-normal">
-            Show this digital slip or QR code at Consulting Room #4. Multimodal AI summary auto-synced.
+            Show this digital slip or QR code at OPD Desk. Multimodal AI summary auto-synced.
           </p>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-3 mt-4">
           <button
             onClick={handlePrintSlip}
@@ -220,12 +215,30 @@ export default function PatientKiosk({ user }) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 mb-6">
           <div>
             <span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">Patient Self-Kiosk</span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-              MEDI<span className="text-clinical-600">kiosk</span><span className="text-brand-600">-AI</span> Check-In
+            <h1 className="text-2xl sm:text-3xl font-black font-heading text-slate-900 tracking-tight mt-0.5">
+              VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span> Check-In
             </h1>
           </div>
-          <div className="flex items-center gap-2 bg-clinical-50 text-clinical-700 border border-clinical-200 px-3 py-1.5 rounded-xl text-xs font-semibold self-start sm:self-auto">
-            ⚡ Multimodal Vision & Triage Active
+          
+          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setCareMode('general')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                careMode === 'general' ? 'bg-white text-clinical-700 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              General OPD
+            </button>
+            <button
+              type="button"
+              onClick={() => setCareMode('ayush')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                careMode === 'ayush' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              🌿 AYUSH
+            </button>
           </div>
         </div>
 
@@ -374,7 +387,7 @@ export default function PatientKiosk({ user }) {
             disabled={loading}
             className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 text-white font-black text-sm shadow-lg shadow-clinical-600/20 hover:shadow-xl transition-all flex items-center justify-center gap-2"
           >
-            {loading ? 'Processing Medical Records ' : 'Submit Records & Generate Slip →'}
+            {loading ? 'Processing Medical Records with Gemini 3.6...' : 'Submit Records & Generate Slip →'}
           </button>
         </form>
       </div>
