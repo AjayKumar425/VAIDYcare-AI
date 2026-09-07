@@ -78,29 +78,61 @@ export default function PatientKiosk({ user }) {
     setFileList((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
-    const data = new FormData();
-    Object.keys(formData).forEach((k) => {
-      if (k === 'symptoms') data.append(k, JSON.stringify(formData[k]));
-      else data.append(k, formData[k]);
-    });
-    data.append('careMode', careMode);
-    fileList.forEach((item) => {
-      data.append('documents', item.file);
-    });
 
     try {
-      const res = await fetch(`${API_BASE}/api/intake/submit`, {
-  method: 'POST',
-  body: formDataToSend // FormData object
-});;
-      const result = await res.json();
-      if (result.success) setCompletedSession(result);
-      else alert(result.error || result.message || 'Submission failed');
+      // 1. Initialize FormData correctly
+      const formDataToSend = new FormData();
+
+      // 2. Append Patient Demographics & Complaint
+      formDataToSend.append('full_name', formData.full_name || patient.full_name || '');
+      formDataToSend.append('age', formData.age || patient.age || '');
+      formDataToSend.append('gender', formData.gender || patient.gender || 'Male');
+      formDataToSend.append('phone', formData.phone || patient.phone || '');
+      formDataToSend.append('abha_id', formData.abha_id || '');
+      formDataToSend.append('chief_complaint', formData.chief_complaint || '');
+      formDataToSend.append('care_mode', careMode || 'general');
+
+      // 3. Append Symptoms (as JSON array string)
+      formDataToSend.append('symptoms', JSON.stringify(selectedSymptoms || []));
+
+      // 4. Append Structured HPI / Interview Data
+      formDataToSend.append('interview_answers', JSON.stringify(interviewAnswers || {}));
+      formDataToSend.append('structured_hpi', JSON.stringify(structuredHpi || {}));
+
+      // 5. Append Uploaded Medical Image Files (X-Rays, Lab Reports, Prescriptions)
+      if (selectedFiles && selectedFiles.length > 0) {
+        Array.from(selectedFiles).forEach((file) => {
+          formDataToSend.append('documents', file);
+        });
+      }
+
+      // 6. Send Multipart Request to Live Render Backend
+      const targetBase = API_BASE || 'https://vaidycare-ai.onrender.com';
+      const res = await fetch(`${targetBase}/api/intake/submit`, {
+        method: 'POST',
+        body: formDataToSend // Note: Do NOT set 'Content-Type' header when sending FormData!
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Backend server is processing. Please retry in 10 seconds.');
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || data.error || 'Failed to submit intake record.');
+      }
+
+      // 7. Store Result & Move to QR Slip Display
+      setSubmittedRecord(data.encounter || data);
+      setIsSubmitted(true);
     } catch (err) {
-      alert('API Connection Error: ' + err.message);
+      console.error('Submission Error:', err);
+      setError(err.message || 'API Connection Error');
     } finally {
       setLoading(false);
     }
