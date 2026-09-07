@@ -1,26 +1,8 @@
-const Encounter = require('../models/Encounter');
-const { detectRedFlags, buildStructuredSummary } = require('../services/aiEngine');
 const QRCode = require('qrcode');
-const path = require('path');
-const { analyzeMedicalDocumentWithGemini } = require('../services/geminiService');
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const CRITICAL_KEYWORDS = [
-  'chest pain',
-  'breathlessness',
-  'shortness of breath',
-  'unconscious',
-  'fainting',
-  'severe bleeding',
-  'seizure',
-  'stroke'
-];
-
-// Top of backend/controllers/intakeController.js
+const Encounter = require('../models/Encounter');
+const { analyzeMedicalDocument } = require('../services/geminiService');
 const { detectRedFlags, buildStructuredSummary } = require('../services/aiEngine');
 
-// Inside submitKioskSession:
 exports.submitKioskSession = async (req, res) => {
   try {
     const {
@@ -35,75 +17,150 @@ exports.submitKioskSession = async (req, res) => {
       interviewAnswers
     } = req.body;
 
-    const parsedAnswers = typeof interviewAnswers === 'string'
-      ? JSON.parse(interviewAnswers || '{}')
-      : (interviewAnswers || {});
-
-    // 1. Run Rule-Based Red Flag Detection on Chief Complaint + Interview
-    const fullTextCorpus = `${chiefComplaint || ''} ${Object.values(parsedAnswers).join(' ')}`;
-    const redFlags = detectRedFlags(fullTextCorpus);
-
-    let highestRiskScore = 10;
-    const allKeywords = new Set();
-
-    if (redFlags.length > 0) {
-      highestRiskScore = Math.max(highestRiskScore, 90);
-      redFlags.forEach((rf) => allKeywords.add(rf.split(':')[0]));
+    // Parse symptoms & interview answers safely
+    let parsedSymptoms = [];
+    if (symptoms) {
+      parsedSymptoms = typeof symptoms === 'string' ? JSON.parse(symptoms) : symptoms;
     }
 
-    // 2. Build Structured HPI Summary
+    let parsedAnswers = {};
+    if (interviewAnswers) {
+      parsedAnswers = typeof interviewAnswers === 'string' ? JSON.parse(interviewAnswers) : interviewAnswers;
+    }
+
+    // 1. Generate Token Number (e.g., V-4821)
+    const tokenNumber = 'V-' + Math.floor(1000 + Math.random() * 9000);
+
+    // 2. Run Red Flag Detection on Chief Complaint & Answers
+    const combinedText = `${chiefComplaint || ''} ${Object.values(parsedAnswers).join(' ')} ${parsedSymptoms.join(' ')}`;
+    const redFlags = detectRedFlags(combinedText);
+
+    // 3. Build Structured HPI (SOCRATES + AYUSH)
     const structuredHpi = buildStructuredSummary(parsedAnswers, careMode);
 
-    // [Keep the existing multer req.files loop & Gemini document analyzer here...]
-    // When computing overallRisk:
-    let overallRisk = 'SAFE';
-    if (highestRiskScore >= 75) overallRisk = 'SEVERE';
-    else if (highestRiskScore >= 45) overallRisk = 'MODERATE';
+    // 4. Process Multi-File Uploads with Gemini Multimodal AI
+    const uploadedDocuments = [];
+    const allSuspectedDiseases = [];
+    const allKeywords = new Set();
+    let highestRiskScore = redFlags.length > 0 ? 85 : 15;
 
-    const triage = {
+    
+
+// In backend/controllers/intakeController.js (inside submitKioskSession):
+
+if (req.files && req.files.length > 0) {
+  for (const file of req.files) {
+    let aiResult = null;
+    try {
+      aiResult = await analyzeMedicalDocument(file.path, file.mimetype);
+    } catch (err) {
+      console.error(`Analysis failed for ${file.originalname}:`, err.message);
+    }
+
+    if (aiResult) {
+      if (aiResult.risk_score && aiResult.risk_score > highestRiskScore) {
+        highestRiskScore = aiResult.risk_score;
+      }
+      
+      // Collect findings as keywords
+      if (Array.isArray(aiResult.findings)) {
+        aiResult.findings.forEach((f) => {
+          const text = typeof f === 'object' ? f.text : f;
+          allKeywords.add(text.slice(0, 35));
+        });
+      }
+
+      // Collect suspected conditions
+      if (Array.isArray(aiResult.suspected_conditions)) {
+        aiResult.suspected_conditions.forEach((sc) => allSuspectedDiseases.push(sc));
+      } else if (aiResult.predicted_condition) {
+        allSuspectedDiseases.push({
+          condition: aiResult.predicted_condition,
+          confidence: '90%',
+          severity: aiResult.risk_score >= 70 ? 'SEVERE' : 'MODERATE',
+          trigger: aiResult.summary || 'Multimodal Scan Extraction'
+        });
+      }
+
+      uploadedDocuments.push({
+        filename: file.filename,
+        original_name: file.originalname,
+        file_path: `/uploads/${file.filename}`,
+        mime_type: file.mimetype,
+        doc_type: aiResult.doc_type || 'RADIOLOGY_XRAY',
+        extracted_data: aiResult
+      });
+    }
+  }
+}
+
+    // Determine Overall Risk Level
+    let overallRisk = 'SAFE';
+    if (highestRiskScore >= 75 || redFlags.length > 0) {
+      overallRisk = 'SEVERE';
+    } else if (highestRiskScore >= 45) {
+      overallRisk = 'MODERATE';
+    }
+
+    const triageSummary = {
       risk_level: overallRisk,
       risk_score: highestRiskScore,
       red_flags: redFlags,
-      suspected_diseases: allSuspectedDiseases.map((d) => ({
-        disease: d.condition || d.disease || 'General Pathology',
-        confidence: d.confidence || '85%',
-        severity: d.severity || 'MODERATE',
-        trigger: d.trigger || 'Diagnostic Report Finding'
-      })),
+      suspected_diseases: allSuspectedDiseases.length > 0 ? allSuspectedDiseases : [
+        {
+          disease: chiefComplaint || 'General OPD Consultation',
+          confidence: '80%',
+          severity: overallRisk,
+          trigger: 'Self-reported intake'
+        }
+      ],
       highlighted_keywords: Array.from(allKeywords),
-      clinical_note: `${overallRisk} Priority: [${careMode.toUpperCase()}] intake with ${redFlags.length} active red flags.`
+      clinical_note: `${overallRisk} priority OPD intake. Care mode: ${careMode.toUpperCase()}. Red flags: ${redFlags.length}.`
     };
 
-    const newEncounter = new Encounter({
+    // 5. Generate QR Code Data URL
+    const qrPayload = JSON.stringify({
+      tokenNumber,
+      patientName: fullName,
+      age,
+      gender,
+      riskLevel: overallRisk,
+      timestamp: new Date().toISOString()
+    });
+    const qrCodeBase64 = await QRCode.toDataURL(qrPayload);
+
+    // 6. Save Encounter to MongoDB
+    const encounter = new Encounter({
       token_number: tokenNumber,
       patient: {
         full_name: fullName || 'Patient',
         age: Number(age) || 0,
-        gender: gender || 'Other',
+        gender: gender || 'Male',
         phone: phone || '',
         abha_id: abhaId || null
       },
       care_mode: careMode,
-      chief_complaint: chiefComplaint || 'Routine Medical Consultation',
+      chief_complaint: chiefComplaint || 'General Checkup',
       symptoms: parsedSymptoms,
       interview_answers: parsedAnswers,
       structured_hpi: structuredHpi,
-      triage_summary: triage,
+      triage_summary: triageSummary,
       documents: uploadedDocuments,
-      qr_code_data: qrCodeBase64
+      qr_code_data: qrCodeBase64,
+      status: 'WAITING'
     });
 
-    await newEncounter.save();
+    await encounter.save();
 
     return res.status(201).json({
       success: true,
       tokenNumber,
       qrCodeBase64,
-      sessionId: newEncounter._id,
-      triage
+      sessionId: encounter._id,
+      triage: triageSummary
     });
-  } catch (error) {
-    console.error('Submission Error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+  } catch (err) {
+    console.error('intakeController submit error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 };

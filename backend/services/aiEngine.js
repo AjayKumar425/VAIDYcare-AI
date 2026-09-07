@@ -102,4 +102,5 @@ function buildStructuredSummary(answers = {}, careMode = 'general') {
   return summary;
 }
 
+
 module.exports = { getFlow, getNextQuestion, detectRedFlags, buildStructuredSummary, GENERAL_FLOW, AYUSH_FLOW };
