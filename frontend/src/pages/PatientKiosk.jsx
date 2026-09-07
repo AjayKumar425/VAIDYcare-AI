@@ -93,9 +93,9 @@ export default function PatientKiosk({ user }) {
 
     try {
       const res = await fetch(`${API_BASE}/api/intake/submit`, {
-        method: 'POST',
-        body: data
-      });
+  method: 'POST',
+  body: formDataToSend // FormData object
+});;
       const result = await res.json();
       if (result.success) setCompletedSession(result);
       else alert(result.error || result.message || 'Submission failed');
