@@ -28,19 +28,27 @@ export default function AuthPage({ onLoginSuccess }) {
       ? { email: formData.email, password: formData.password, role }
       : { ...formData, role };
 
-    const targetBase = API_BASE || 'https://vaidycare-ai.onrender.com';
-    const endpoint = `${targetBase}/api/auth/${isLogin ? 'login' : 'register'}`;
+    // Clean URL construction
+    const base = (API_BASE || 'https://vaidycare-ai.onrender.com').replace(/\/+$/, '');
+    const endpoint = `${base}/api/auth/${isLogin ? 'login' : 'register'}`;
+
+    console.log('Sending request to endpoint:', endpoint);
 
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        throw new Error('Backend is starting up on Render. Please wait ~20 seconds and try again.');
+        const text = await res.text();
+        console.error('Non-JSON response received from server:', text);
+        throw new Error('Backend is currently waking up or URL is unreachable. Please wait 15-20 seconds and try again.');
       }
 
       const data = await res.json();

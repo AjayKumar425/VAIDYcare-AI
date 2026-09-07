@@ -7,6 +7,10 @@
     {
       "source": "/uploads/:match*",
       "destination": "https://vaidycare-ai.onrender.com/uploads/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
