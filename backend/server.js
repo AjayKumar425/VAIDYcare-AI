@@ -9,6 +9,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const intakeRoutes = require('./routes/intakeRoutes');
 const doctorRoutes = require('./routes/doctorRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -52,6 +53,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/intake', intakeRoutes);
 app.use('/api/doctor', doctorRoutes);
+app.use('/api/ai-proxy', aiRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

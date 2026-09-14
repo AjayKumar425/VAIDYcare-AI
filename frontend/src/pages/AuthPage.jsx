@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { API_BASE } from '../utils/api';
+import { useLanguage } from '../context/LanguageContext';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function AuthPage({ onLoginSuccess }) {
+  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('PATIENT');
   const [formData, setFormData] = useState({
@@ -12,7 +15,8 @@ export default function AuthPage({ onLoginSuccess }) {
     age: '',
     gender: 'Male',
     specialization: '',
-    licenseNumber: ''
+    licenseNumber: '',
+    abhaId: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -62,6 +66,8 @@ export default function AuthPage({ onLoginSuccess }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900/5">
+      {/* Language Switcher - top right corner on login page */}
+      <LanguageSwitcher position="top-right" variant="pill" />
       <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-8 transition-all">
         {/* Brand Header */}
         <div className="text-center mb-6">
@@ -71,7 +77,11 @@ export default function AuthPage({ onLoginSuccess }) {
           <h1 className="text-2xl font-black font-heading tracking-tight text-slate-800">
             VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span>
           </h1>
-          <p className="text-xs font-medium text-slate-500 mt-1">Intelligent Clinical Intake & OPD Triage System</p>
+          <p className="text-xs font-medium text-slate-500 mt-1">{t('app.subtitle', 'Intelligent Clinical Intake & OPD Triage System')}</p>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <span className="text-[10px] text-slate-400 font-semibold">🌐 Language:</span>
+            <LanguageSwitcher position="inline" variant="default" />
+          </div>
         </div>
 
         {/* Role Toggle */}
@@ -83,7 +93,7 @@ export default function AuthPage({ onLoginSuccess }) {
               role === 'PATIENT' ? 'bg-white text-clinical-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            Patient Kiosk
+            {t('auth.patientKiosk', 'Patient Kiosk')}
           </button>
           <button
             type="button"
@@ -92,7 +102,7 @@ export default function AuthPage({ onLoginSuccess }) {
               role === 'DOCTOR' ? 'bg-white text-clinical-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            Doctor Desk
+            {t('auth.doctorDesk', 'Doctor Desk')}
           </button>
         </div>
 
@@ -185,6 +195,18 @@ export default function AuthPage({ onLoginSuccess }) {
                       <option>Other</option>
                     </select>
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">ABHA ID (Optional)</label>
+                    <input
+                      name="abhaId"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-mono"
+                      placeholder="XX-XXXX-XXXX-XXXX"
+                      maxLength={19}
+                      value={formData.abhaId}
+                      onChange={handleChange}
+                    />
+                    {formData.abhaId && !/^\d{2}-\d{4}-\d{4}-\d{4}$/.test(formData.abhaId) && <p className="text-[11px] text-amber-600 mt-1 font-semibold">Format: XX-XXXX-XXXX-XXXX</p>}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -223,9 +245,9 @@ export default function AuthPage({ onLoginSuccess }) {
             {loading ? (
               <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
             ) : isLogin ? (
-              `Sign In as ${role === 'PATIENT' ? 'Patient' : 'Doctor'}`
+              t('auth.signIn', 'Sign In')
             ) : (
-              `Register ${role === 'PATIENT' ? 'Patient' : 'Doctor'}`
+              t('auth.register', 'Register')
             )}
           </button>
         </form>

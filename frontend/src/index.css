@@ -109,3 +109,56 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Accessibility Mode / High Contrast Styling */
+.accessibility-mode {
+  --tw-bg-opacity: 1;
+  background-color: rgb(15 23 42 / var(--tw-bg-opacity)); /* slate-900 */
+  color: #f8fafc; /* slate-50 */
+}
+
+.accessibility-mode * {
+  border-color: #fbbf24 !important; /* yellow-400 */
+  box-shadow: none !important;
+}
+
+.accessibility-mode h1, 
+.accessibility-mode h2, 
+.accessibility-mode h3, 
+.accessibility-mode h4, 
+.accessibility-mode h5, 
+.accessibility-mode h6 {
+  font-size: 1.25em !important;
+  color: #facc15 !important; /* yellow-400 */
+}
+
+.accessibility-mode p, 
+.accessibility-mode span, 
+.accessibility-mode div {
+  font-size: 1.1em;
+}
+
+.accessibility-mode button, 
+.accessibility-mode input, 
+.accessibility-mode select, 
+.accessibility-mode textarea {
+  background-color: #000 !important;
+  color: #fff !important;
+  font-size: 1.1em !important;
+  border: 2px solid #fbbf24 !important;
+}
+
+.accessibility-mode .bg-white,
+.accessibility-mode .bg-slate-50,
+.accessibility-mode .bg-slate-100 {
+  background-color: #000 !important;
+}
+
+.accessibility-mode .text-slate-400,
+.accessibility-mode .text-slate-500,
+.accessibility-mode .text-slate-600,
+.accessibility-mode .text-slate-700,
+.accessibility-mode .text-slate-800,
+.accessibility-mode .text-slate-900 {
+  color: #f8fafc !important;
+}
