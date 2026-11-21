@@ -41,7 +41,8 @@ exports.submitKioskSession = async (req, res) => {
     }
 
     // 0. Resolve patient_id: use registered ID if provided, else generate walk-in ID
-    const resolvedPatientId = (patientId && patientId.trim()) ? patientId.trim() : generateWalkInId();
+    const rawPatientId = (typeof patientId !== 'undefined' && patientId) ? patientId : (req.body && req.body.patientId);
+    const resolvedPatientId = (rawPatientId && String(rawPatientId).trim()) ? String(rawPatientId).trim() : generateWalkInId();
 
     // 1. Generate Token Number (e.g., V-4821)
     const tokenNumber = 'V-' + Math.floor(1000 + Math.random() * 9000);
