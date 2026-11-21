@@ -13,3 +13,4 @@ jobs:
       - name: Ping Render Backend Health Check
         run: |
           curl -s -f --max-time 90 https://vaidycare-ai.onrender.com/health || echo "Waking up..."
+
