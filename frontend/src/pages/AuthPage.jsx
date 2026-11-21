@@ -37,6 +37,11 @@ export default function AuthPage({ onLoginSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    // Pre-warm backend while user is on auth screen
+    fetch(`${API_BASE}/health`).catch(() => {});
+  }, []);
+
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
