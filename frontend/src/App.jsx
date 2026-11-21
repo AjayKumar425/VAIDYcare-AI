@@ -1,14 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PatientKiosk from './pages/PatientKiosk';
 import DoctorPortal from './pages/DoctorPortal';
 import AuthPage from './pages/AuthPage';
 import { useLanguage } from './context/LanguageContext';
 import { Contrast } from 'lucide-react';
+import { animateSplitText, gsap } from './utils/animations';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [highContrast, setHighContrast] = useState(false);
   const { lang, setLang, t, LANGUAGES } = useLanguage();
+  const brandTitleRef = useRef(null);
+
+  useEffect(() => {
+    if (currentUser && brandTitleRef.current) {
+      animateSplitText(brandTitleRef.current, { y: 5, duration: 0.35, stagger: 0.02 });
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('medikiosk_user');
@@ -46,7 +54,7 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className={`text-xl font-black font-heading tracking-tight ${
+                <span ref={brandTitleRef} className={`text-xl font-black font-heading tracking-tight ${
                   highContrast 
                     ? 'text-white' 
                     : 'bg-gradient-to-r from-slate-900 via-clinical-900 to-clinical-700 bg-clip-text text-transparent'

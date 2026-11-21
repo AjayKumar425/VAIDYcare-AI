@@ -565,6 +565,22 @@ export default function DoctorPortal({ doctor }) {
   const [editFields, setEditFields] = useState({ chief_complaint: '', clinical_note: '', doctor_notes: '', status: 'IN_PROGRESS' });
   const [activeTab, setActiveTab] = useState('summary');
   const reportRef = useRef(null);
+  const patientBannerRef = useRef(null);
+  const tabContainerRef = useRef(null);
+
+  // Subtle entrance when patient encounter data loads
+  useEffect(() => {
+    if (data && patientBannerRef.current) {
+      animateScaleIn(patientBannerRef.current, { fromScale: 0.98, y: 10, duration: 0.35 });
+    }
+  }, [data]);
+
+  // Subtle micro-transition when switching tabs
+  useEffect(() => {
+    if (tabContainerRef.current) {
+      animateTabTransition(tabContainerRef.current, { y: 6, duration: 0.22 });
+    }
+  }, [activeTab]);
 
   const printReport = () => {
     const el = reportRef.current;
@@ -756,7 +772,7 @@ export default function DoctorPortal({ doctor }) {
       {/* ── PATIENT CARD ───────────────────────────────────────────────── */}
       {data && (
         <div className="space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-sm">
+          <div ref={patientBannerRef} className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-clinical-500 to-brand-500 flex items-center justify-center text-white font-black text-xl shadow-md flex-shrink-0">
@@ -811,8 +827,10 @@ export default function DoctorPortal({ doctor }) {
             ))}
           </div>
 
-          {/* ── TAB: CLINICAL SUMMARY ─────────────────────────────────────── */}
-          {activeTab === 'summary' && (
+          {/* ── Tab Content Container with Micro-transition ─────────────── */}
+          <div ref={tabContainerRef}>
+            {/* ── TAB: CLINICAL SUMMARY ─────────────────────────────────────── */}
+            {activeTab === 'summary' && (
             <div className="space-y-4">
               {/* Triage banner */}
               <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
@@ -1729,6 +1747,8 @@ export default function DoctorPortal({ doctor }) {
               />
             </div>
           )}
+
+          </div>
 
         </div>
       )}
