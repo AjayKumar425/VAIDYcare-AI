@@ -2,8 +2,15 @@
 // AI-powered handwritten prescription keyword extractor component.
 // Paste raw OCR text or type the prescription → instant structured drug output.
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { API_BASE } from '../utils/api';
+import { 
+  animateSplitText, 
+  animateStaggerCards, 
+  animateOnScroll, 
+  animateTabTransition,
+  gsap 
+} from '../utils/animations';
 
 const FLAG_STYLES = {
   RED:    { card: 'border-rose-300 bg-rose-50',    badge: 'bg-rose-100 text-rose-800 border-rose-300',    dot: 'bg-rose-500 animate-pulse', icon: '🔴', label: 'HIGH RISK'  },
@@ -40,6 +47,59 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
   const [error, setError] = useState('');
   const [activeSection, setActiveSection] = useState('medicines');
   const printRef = useRef(null);
+
+  const containerRef = useRef(null);
+  const titleRef = useRef(null);
+  const resultsRef = useRef(null);
+  const bannerRef = useRef(null);
+  const tabContentRef = useRef(null);
+
+  // Mount animation: Subtle ScrollTrigger + SplitText heading
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      if (containerRef.current) {
+        animateOnScroll(containerRef.current);
+      }
+      if (titleRef.current) {
+        animateSplitText(titleRef.current, { y: 6, duration: 0.4, stagger: 0.03 });
+      }
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
+  // When result arrives: Subtle stagger reveal
+  useEffect(() => {
+    if (!result || !resultsRef.current) return;
+
+    const ctx = gsap.context(() => {
+      if (bannerRef.current) {
+        gsap.fromTo(bannerRef.current, 
+          { opacity: 0, y: -8 }, 
+          { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' }
+        );
+      }
+
+      const statCards = resultsRef.current.querySelectorAll('.rx-stat-card');
+      if (statCards.length > 0) {
+        animateStaggerCards(statCards, { y: 8, stagger: 0.04 });
+      }
+
+      const medCards = resultsRef.current.querySelectorAll('.rx-med-card');
+      if (medCards.length > 0) {
+        animateStaggerCards(medCards, { y: 10, stagger: 0.035 });
+      }
+    }, resultsRef);
+
+    return () => ctx.revert();
+  }, [result]);
+
+  // Tab change transition
+  useEffect(() => {
+    if (tabContentRef.current) {
+      animateTabTransition(tabContentRef.current);
+    }
+  }, [activeSection]);
 
   const analyzePrescription = async (text) => {
     const tx = (text || rawText).trim();
@@ -87,13 +147,13 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
   const riskStyle = RISK_BANNER[risk] || RISK_BANNER.LOW;
 
   return (
-    <div className="space-y-4">
+    <div ref={containerRef} className="space-y-4">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
           <span className="text-[10px] font-black text-clinical-600 uppercase tracking-widest block">AI Prescription Analyzer</span>
-          <h3 className="text-base font-black text-slate-900">Handwritten Rx Keyword Extractor</h3>
+          <h3 ref={titleRef} className="text-base font-black text-slate-900">Handwritten Rx Keyword Extractor</h3>
           <p className="text-[11px] text-slate-400 mt-0.5">Paste OCR text or type the prescription → AI extracts drugs, doses, frequencies & flags</p>
         </div>
         <button onClick={loadDemo} className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-black hover:bg-indigo-100 transition-all">
@@ -117,7 +177,7 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
         <button
           onClick={() => analyzePrescription()}
           disabled={loading || !rawText.trim()}
-          className="mt-2 w-full py-3 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 text-white font-black text-sm shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          className="mt-2 w-full py-3 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 text-white font-black text-sm shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
         >
           {loading ? <><span className="animate-spin text-lg">⟳</span> Analyzing Prescription...</> : '🔍 Extract & Analyze Prescription'}
         </button>
@@ -125,10 +185,10 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
 
       {/* ── Results ────────────────────────────────────────────────────────── */}
       {result && (
-        <div className="space-y-4">
+        <div ref={resultsRef} className="space-y-4">
 
           {/* Risk banner */}
-          <div className={`${riskStyle.bg} rounded-2xl px-4 py-3 flex items-center justify-between text-white shadow-md`}>
+          <div ref={bannerRef} className={`${riskStyle.bg} rounded-2xl px-4 py-3 flex items-center justify-between text-white shadow-md`}>
             <div className="flex items-center gap-2">
               <span className="text-2xl">{riskStyle.icon}</span>
               <div>
@@ -149,7 +209,7 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
           {/* Diagnoses + Instructions strip */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {result.diagnoses?.length > 0 && (
-              <div className="bg-indigo-50 rounded-2xl p-3 border border-indigo-200">
+              <div className="bg-indigo-50 rounded-2xl p-3 border border-indigo-200 rx-stat-card">
                 <span className="text-[9px] font-black text-indigo-500 uppercase tracking-wider block mb-1.5">Dx — Extracted Diagnoses</span>
                 <div className="flex flex-wrap gap-1">
                   {result.diagnoses.map((d, i) => (
@@ -159,7 +219,7 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
               </div>
             )}
             {result.allergen_warnings?.length > 0 && (
-              <div className="bg-rose-50 rounded-2xl p-3 border border-rose-200">
+              <div className="bg-rose-50 rounded-2xl p-3 border border-rose-200 rx-stat-card">
                 <span className="text-[9px] font-black text-rose-500 uppercase tracking-wider block mb-1.5">⚠️ Allergen / Warnings</span>
                 {result.allergen_warnings.map((w, i) => (
                   <div key={i} className="text-[10px] font-bold text-rose-700 flex items-center gap-1">
@@ -173,7 +233,7 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
 
           {/* Instructions */}
           {result.special_instructions?.length > 0 && (
-            <div className="bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-200 flex flex-wrap gap-1.5 items-center">
+            <div className="bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-200 flex flex-wrap gap-1.5 items-center rx-stat-card">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mr-1">Instructions:</span>
               {result.special_instructions.map((ins, i) => (
                 <span key={i} className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">{ins}</span>
@@ -194,85 +254,88 @@ export default function PrescriptionScanner({ patientName, patientAge }) {
             ))}
           </div>
 
-          {/* ── Medicines tab ────────────────────────────────────────────── */}
-          {activeSection === 'medicines' && (
-            <div className="space-y-2">
-              {result.medicines.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">No recognized drug names found. Try adding more details to the prescription text.</div>
-              ) : (
-                result.medicines.map((med, i) => {
-                  const st = FLAG_STYLES[med.flag] || FLAG_STYLES.GREEN;
-                  return (
-                    <div key={i} className={`rounded-2xl border-2 p-4 ${st.card} transition-all hover:shadow-md`}>
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${st.dot} mt-0.5`}></span>
-                          <div>
-                            <span className="text-sm font-black text-slate-900">{med.drug_name}</span>
-                            <span className="ml-2 text-[10px] font-bold text-slate-500">{med.drug_class}</span>
-                          </div>
-                        </div>
-                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border uppercase flex-shrink-0 ${st.badge}`}>
-                          {st.icon} {st.label}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 ml-4">
-                        {med.dosage && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
-                            <span className="text-slate-400">Dose:</span> {med.dosage}
-                          </span>
-                        )}
-                        {med.frequency && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
-                            <span className="text-slate-400">Freq:</span> {med.frequency}
-                          </span>
-                        )}
-                        {med.route && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
-                            <span className="text-slate-400">Route:</span> {med.route}
-                          </span>
-                        )}
-                        {med.duration && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
-                            <span className="text-slate-400">For:</span> {med.duration}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
-                          <span className="text-slate-400">Use:</span> {med.typical_use}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-
-          {/* ── Symptom Flags tab ────────────────────────────────────────── */}
-          {activeSection === 'symptoms' && (
-            <div>
-              {(!result.flagged_symptoms || result.flagged_symptoms.length === 0) ? (
-                <div className="text-center py-8 text-slate-400 text-xs">No clinical symptom keywords detected in this prescription.</div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {result.flagged_symptoms.map((k, i) => {
-                    const st = FLAG_STYLES[k.priority] || FLAG_STYLES.GREEN;
+          {/* ── Tab Content Container with Micro-transition ─────────────────── */}
+          <div ref={tabContentRef}>
+            {/* ── Medicines tab ────────────────────────────────────────────── */}
+            {activeSection === 'medicines' && (
+              <div className="space-y-2">
+                {result.medicines.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs">No recognized drug names found. Try adding more details to the prescription text.</div>
+                ) : (
+                  result.medicines.map((med, i) => {
+                    const st = FLAG_STYLES[med.flag] || FLAG_STYLES.GREEN;
                     return (
-                      <div key={i} title={`${k.suspected_disease} (ICD: ${k.icd_code})`}
-                        className={`border rounded-xl px-3 py-2 cursor-help ${st.card}`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
-                          <span className="text-xs font-black text-slate-800">{k.keyword}</span>
+                      <div key={i} className={`rounded-2xl border-2 p-4 ${st.card} transition-all hover:shadow-md rx-med-card`}>
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${st.dot} mt-0.5`}></span>
+                            <div>
+                              <span className="text-sm font-black text-slate-900">{med.drug_name}</span>
+                              <span className="ml-2 text-[10px] font-bold text-slate-500">{med.drug_class}</span>
+                            </div>
+                          </div>
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border uppercase flex-shrink-0 ${st.badge}`}>
+                            {st.icon} {st.label}
+                          </span>
                         </div>
-                        <div className="mt-0.5 ml-3 text-[9px] font-bold text-slate-500">{k.suspected_disease}</div>
-                        {k.icd_code && <div className="ml-3 text-[8px] font-mono text-slate-400">ICD: {k.icd_code}</div>}
+                        <div className="flex flex-wrap gap-2 ml-4">
+                          {med.dosage && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                              <span className="text-slate-400">Dose:</span> {med.dosage}
+                            </span>
+                          )}
+                          {med.frequency && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                              <span className="text-slate-400">Freq:</span> {med.frequency}
+                            </span>
+                          )}
+                          {med.route && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                              <span className="text-slate-400">Route:</span> {med.route}
+                            </span>
+                          )}
+                          {med.duration && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                              <span className="text-slate-400">For:</span> {med.duration}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1 text-[10px] font-bold bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                            <span className="text-slate-400">Use:</span> {med.typical_use}
+                          </span>
+                        </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                  })
+                )}
+              </div>
+            )}
+
+            {/* ── Symptom Flags tab ────────────────────────────────────────── */}
+            {activeSection === 'symptoms' && (
+              <div>
+                {(!result.flagged_symptoms || result.flagged_symptoms.length === 0) ? (
+                  <div className="text-center py-8 text-slate-400 text-xs">No clinical symptom keywords detected in this prescription.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {result.flagged_symptoms.map((k, i) => {
+                      const st = FLAG_STYLES[k.priority] || FLAG_STYLES.GREEN;
+                      return (
+                        <div key={i} title={`${k.suspected_disease} (ICD: ${k.icd_code})`}
+                          className={`border rounded-xl px-3 py-2 cursor-help ${st.card} rx-stat-card`}>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
+                            <span className="text-xs font-black text-slate-800">{k.keyword}</span>
+                          </div>
+                          <div className="mt-0.5 ml-3 text-[9px] font-bold text-slate-500">{k.suspected_disease}</div>
+                          {k.icd_code && <div className="ml-3 text-[8px] font-mono text-slate-400">ICD: {k.icd_code}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* ── Hidden printable area ────────────────────────────────────── */}
           <div ref={printRef} style={{ display: 'none' }}>

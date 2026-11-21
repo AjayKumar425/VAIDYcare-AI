@@ -12,7 +12,7 @@ const generateToken = (user) => {
 // Register Doctor or Patient
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role, phone, specialization, licenseNumber, age, gender, abhaId } = req.body;
+    const { name, email, password, role, phone, specialization, licenseNumber, age, gender, abhaId, bloodGroup } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -29,6 +29,7 @@ exports.register = async (req, res) => {
       licenseNumber: role.toUpperCase() === 'DOCTOR' ? licenseNumber : undefined,
       age: role.toUpperCase() === 'PATIENT' ? age : undefined,
       gender: role.toUpperCase() === 'PATIENT' ? gender : undefined,
+      bloodGroup: role.toUpperCase() === 'PATIENT' ? bloodGroup : undefined,
       abhaId: role.toUpperCase() === 'PATIENT' ? abhaId : undefined
     });
 
@@ -46,7 +47,8 @@ exports.register = async (req, res) => {
         role: user.role,
         phone: user.phone,
         age: user.age,
-        gender: user.gender
+        gender: user.gender,
+        bloodGroup: user.bloodGroup || ''
       }
     });
   } catch (error) {
@@ -87,6 +89,7 @@ exports.login = async (req, res) => {
         phone: user.phone,
         age: user.age,
         gender: user.gender,
+        bloodGroup: user.bloodGroup || '',
         specialization: user.specialization
       }
     });

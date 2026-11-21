@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { API_BASE } from '../utils/api';
 import PrescriptionScanner from '../components/PrescriptionScanner';
+import { animateSplitText, animateStaggerCards, animateTabTransition, animateScaleIn, gsap } from '../utils/animations';
 
 const AYUSH_PARAM_LABELS = {
   prakriti: 'Prakriti (Constitution)', vikriti: 'Vikriti (Imbalance)',

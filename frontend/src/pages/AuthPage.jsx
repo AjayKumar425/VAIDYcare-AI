@@ -1,12 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { API_BASE } from '../utils/api';
 import { useLanguage } from '../context/LanguageContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { animateSplitText, animateScaleIn, gsap } from '../utils/animations';
 
 export default function AuthPage({ onLoginSuccess }) {
   const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('PATIENT');
+  const cardRef = useRef(null);
+  const titleRef = useRef(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      if (cardRef.current) {
+        animateScaleIn(cardRef.current, { fromScale: 0.98, y: 12, duration: 0.4 });
+      }
+      if (titleRef.current) {
+        animateSplitText(titleRef.current, { y: 6, duration: 0.38, stagger: 0.03 });
+      }
+    });
+
+    return () => ctx.revert();
+  }, []);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -68,13 +84,13 @@ export default function AuthPage({ onLoginSuccess }) {
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900/5">
       {/* Language Switcher - top right corner on login page */}
       <LanguageSwitcher position="top-right" variant="pill" />
-      <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-8 transition-all">
+      <div ref={cardRef} className="w-full max-w-md bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-8 transition-all">
         {/* Brand Header */}
         <div className="text-center mb-6">
           <div className="inline-flex w-12 h-12 rounded-2xl bg-gradient-to-tr from-clinical-600 to-brand-500 items-center justify-center shadow-lg shadow-clinical-500/30 text-white font-black font-heading text-2xl mb-3">
             V+
           </div>
-          <h1 className="text-2xl font-black font-heading tracking-tight text-slate-800">
+          <h1 ref={titleRef} className="text-2xl font-black font-heading tracking-tight text-slate-800">
             VAIDY<span className="text-clinical-600">care</span><span className="text-brand-600">-AI</span>
           </h1>
           <p className="text-xs font-medium text-slate-500 mt-1">{t('app.subtitle', 'Intelligent Clinical Intake & OPD Triage System')}</p>

@@ -14,6 +14,7 @@ exports.submitKioskSession = async (req, res) => {
       gender,
       phone,
       abhaId,
+      bloodGroup,
       chiefComplaint,
       symptoms,
       careMode = 'general',
@@ -259,7 +260,8 @@ exports.submitKioskSession = async (req, res) => {
         age: Number(age) || 0,
         gender: gender || 'Male',
         phone: phone || '',
-        abha_id: abhaId || null
+        abha_id: abhaId || null,
+        blood_group: bloodGroup || ''
       },
       care_mode: careMode,
       chief_complaint: chiefComplaint || 'General Checkup',

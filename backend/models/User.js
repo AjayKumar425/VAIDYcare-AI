@@ -11,6 +11,7 @@ const UserSchema = new mongoose.Schema({
   licenseNumber: { type: String, default: '' },
   age: { type: Number },
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
+  bloodGroup: { type: String, default: '' },
   abhaId: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 });

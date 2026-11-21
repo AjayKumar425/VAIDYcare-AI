@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { API_BASE } from '../utils/api';
 import { useLanguage } from '../context/LanguageContext';
+import { animateSplitText, animateStaggerCards, animateTabTransition, animateScaleIn, gsap } from '../utils/animations';
 
 const GENERAL_FLOW = [
   { key: 'onset', section: 'HPI', type: 'choice', text: 'When did this start?', text_hi: 'यह कब शुरू हुआ?', options: ['Today', 'Last 2-3 days', 'This week', 'This month', 'Longer than a month'] },
@@ -69,7 +70,7 @@ export default function PatientKiosk({ user }) {
   const [careMode, setCareMode] = useState('general');
   const [formData, setFormData] = useState({
     fullName: user?.name || '', age: user?.age || '', gender: user?.gender || 'Male',
-    phone: user?.phone || '', abhaId: user?.abhaId || '', chiefComplaint: '', symptoms: [],
+    phone: user?.phone || '', abhaId: user?.abhaId || '', bloodGroup: user?.bloodGroup || '', chiefComplaint: '', symptoms: [],
   });
   const [answers, setAnswers] = useState({});
   const [multiSelected, setMultiSelected] = useState([]);
@@ -81,6 +82,41 @@ export default function PatientKiosk({ user }) {
   const [error, setError] = useState('');
   const [showEmergency, setShowEmergency] = useState(false);
   const slipRef = useRef(null);
+  const headingRef = useRef(null);
+  const cardRef = useRef(null);
+  const qCardRef = useRef(null);
+
+  // Subtle step transition & SplitText heading
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      if (headingRef.current) {
+        animateSplitText(headingRef.current, { y: 6, duration: 0.38, stagger: 0.025 });
+      }
+      if (cardRef.current) {
+        animateTabTransition(cardRef.current, { y: 8, duration: 0.28 });
+      }
+      const optCards = document.querySelectorAll('.care-mode-opt');
+      if (optCards.length > 0) {
+        animateStaggerCards(optCards, { y: 10, stagger: 0.04 });
+      }
+    });
+
+    return () => ctx.revert();
+  }, [step]);
+
+  // Subtle interview question change micro-transition
+  useEffect(() => {
+    if (step === 3 && qCardRef.current) {
+      animateTabTransition(qCardRef.current, { y: 6, duration: 0.2 });
+    }
+  }, [qIndex, step]);
+
+  // Subtle appointment slip entrance
+  useEffect(() => {
+    if (completedSession && slipRef.current) {
+      animateScaleIn(slipRef.current, { fromScale: 0.97, y: 14, duration: 0.45 });
+    }
+  }, [completedSession]);
 
   // ── Live ML keyword analysis state ────────────────────────────────────────
   const [liveKeywords, setLiveKeywords] = useState([]);
@@ -170,7 +206,8 @@ export default function PatientKiosk({ user }) {
       const fd = new FormData();
       fd.append('fullName', formData.fullName); fd.append('age', formData.age);
       fd.append('gender', formData.gender); fd.append('phone', formData.phone);
-      fd.append('abhaId', formData.abhaId); fd.append('chiefComplaint', formData.chiefComplaint);
+      fd.append('abhaId', formData.abhaId); fd.append('bloodGroup', formData.bloodGroup || '');
+      fd.append('chiefComplaint', formData.chiefComplaint);
       fd.append('careMode', careMode); fd.append('symptoms', JSON.stringify(formData.symptoms));
       fd.append('interviewAnswers', JSON.stringify(answers));
       fileList.forEach(item => { if (item.file) fd.append('documents', item.file); });
@@ -228,6 +265,9 @@ export default function PatientKiosk({ user }) {
           <div className="space-y-1.5 text-xs border-y border-slate-100 py-3 mb-4">
             <div className="flex justify-between"><span className="text-slate-400 font-semibold">Patient:</span><span className="font-extrabold">{formData.fullName}</span></div>
             <div className="flex justify-between"><span className="text-slate-400 font-semibold">Age / Gender:</span><span className="font-bold">{formData.age} Y - {formData.gender}</span></div>
+            {formData.bloodGroup && (
+              <div className="flex justify-between"><span className="text-slate-400 font-semibold">Blood Group:</span><span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">{formData.bloodGroup}</span></div>
+            )}
             <div className="flex justify-between"><span className="text-slate-400 font-semibold">Care Mode:</span><span className="font-bold uppercase">{careMode}</span></div>
             <div className="flex justify-between"><span className="text-slate-400 font-semibold">Interview:</span><span className="font-bold text-emerald-700">{Object.keys(answers).length} questions answered</span></div>
           </div>
@@ -249,10 +289,10 @@ export default function PatientKiosk({ user }) {
 
   if (step === 0) return (
     <div className="max-w-2xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
+      <div ref={cardRef} className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
         <StepBar />
         <div className="flex items-center justify-between mb-6">
-          <div><span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">{t('kiosk.step1', 'Step 1 of 6')}</span><h1 className="text-2xl font-black font-heading text-slate-900 mt-0.5">{t('kiosk.patientDetails', 'Patient Details')}</h1></div>
+          <div><span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">{t('kiosk.step1', 'Step 1 of 6')}</span><h1 ref={headingRef} className="text-2xl font-black font-heading text-slate-900 mt-0.5">{t('kiosk.patientDetails', 'Patient Details')}</h1></div>
         </div>
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -263,7 +303,27 @@ export default function PatientKiosk({ user }) {
             <div><label className="block text-xs font-bold text-slate-700 mb-1.5">{t('kiosk.gender', 'Gender')}</label><select value={formData.gender} onChange={e => setFormData(p => ({...p, gender: e.target.value}))} className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 outline-none"><option>Male</option><option>Female</option><option>Other</option></select></div>
             <div><label className="block text-xs font-bold text-slate-700 mb-1.5">{t('kiosk.phone', 'Phone Number')} *</label><input type="tel" required value={formData.phone} onChange={e => setFormData(p => ({...p, phone: e.target.value}))} className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 outline-none" placeholder="+91 9876543210" /></div>
           </div>
-          <div><label className="block text-xs font-bold text-slate-700 mb-1.5">{t('kiosk.abhaId', 'ABHA ID')}</label><input value={formData.abhaId} onChange={e => setFormData(p => ({...p, abhaId: e.target.value}))} className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 outline-none font-mono" placeholder="XX-XXXX-XXXX-XXXX" maxLength={19} />{formData.abhaId && !/^\d{2}-\d{4}-\d{4}-\d{4}$/.test(formData.abhaId) && <p className="text-[11px] text-amber-600 mt-1 font-semibold">Format: XX-XXXX-XXXX-XXXX</p>}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">{t('kiosk.abhaId', 'ABHA ID')}</label>
+              <input value={formData.abhaId} onChange={e => setFormData(p => ({...p, abhaId: e.target.value}))} className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 outline-none font-mono" placeholder="XX-XXXX-XXXX-XXXX" maxLength={19} />
+              {formData.abhaId && !/^\d{2}-\d{4}-\d{4}-\d{4}$/.test(formData.abhaId) && <p className="text-[11px] text-amber-600 mt-1 font-semibold">Format: XX-XXXX-XXXX-XXXX</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">{t('kiosk.bloodGroup', 'Blood Group (Optional)')}</label>
+              <select value={formData.bloodGroup} onChange={e => setFormData(p => ({...p, bloodGroup: e.target.value}))} className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 outline-none">
+                <option value="">Don't Know / Not Tested</option>
+                <option value="A+">A+ (A Positive)</option>
+                <option value="A-">A- (A Negative)</option>
+                <option value="B+">B+ (B Positive)</option>
+                <option value="B-">B- (B Negative)</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+              </select>
+            </div>
+          </div>
           <button onClick={() => { if (!formData.fullName || !formData.age || !formData.phone) { setError('Please fill in Name, Age and Phone.'); return; } setError(''); setStep(1); }} className="w-full py-4 rounded-2xl bg-gradient-to-r from-clinical-600 to-brand-600 text-white font-black text-sm shadow-lg">{t('kiosk.continue', 'Continue')} &rarr;</button>
           {error && <p className="text-xs text-red-600 font-bold text-center">{error}</p>}
         </div>
@@ -273,15 +333,15 @@ export default function PatientKiosk({ user }) {
 
   if (step === 1) return (
     <div className="max-w-2xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
+      <div ref={cardRef} className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
         <StepBar />
         <span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">{t('kiosk.step2', 'Step 2 of 6')}</span>
-        <h2 className="text-2xl font-black font-heading text-slate-900 mt-0.5 mb-6">{t('kiosk.selectCareMode', 'Select Care Mode')}</h2>
+        <h2 ref={headingRef} className="text-2xl font-black font-heading text-slate-900 mt-0.5 mb-6">{t('kiosk.selectCareMode', 'Select Care Mode')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {[{value:'general',icon:'H',title:t('kiosk.generalOpd', 'General / Allopathy OPD'),desc:t('kiosk.generalDesc', 'Standard SOCRATES clinical history - 19 questions covering all medical systems')},
             {value:'ayush',icon:'Y',title:t('kiosk.ayushOpd', 'AYUSH / Ayurveda OPD'),desc:t('kiosk.ayushDesc', 'Full Dashavidha Pariksha (all 10 Ayurvedic parameters) + standard history - 31 questions')}
           ].map(opt => (
-            <button key={opt.value} onClick={() => setCareMode(opt.value)} className={`p-6 rounded-2xl border-2 text-left transition-all ${careMode === opt.value ? (opt.value === 'ayush' ? 'border-emerald-500 bg-emerald-50' : 'border-clinical-500 bg-clinical-50') : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
+            <button key={opt.value} onClick={() => setCareMode(opt.value)} className={`care-mode-opt p-6 rounded-2xl border-2 text-left transition-all ${careMode === opt.value ? (opt.value === 'ayush' ? 'border-emerald-500 bg-emerald-50' : 'border-clinical-500 bg-clinical-50') : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
               <div className="text-2xl font-black mb-3">{opt.icon}</div>
               <div className={`font-black text-base ${careMode === opt.value ? (opt.value === 'ayush' ? 'text-emerald-700' : 'text-clinical-700') : 'text-slate-800'}`}>{opt.title}</div>
               <div className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{opt.desc}</div>
@@ -299,10 +359,10 @@ export default function PatientKiosk({ user }) {
 
   if (step === 2) return (
     <div className="max-w-2xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
+      <div ref={cardRef} className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
         <StepBar />
         <span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">{t('kiosk.step3', 'Step 3 of 6')}</span>
-        <h2 className="text-2xl font-black font-heading text-slate-900 mt-0.5 mb-1">{t('kiosk.chiefComplaint','Chief Complaint')}</h2>
+        <h2 ref={headingRef} className="text-2xl font-black font-heading text-slate-900 mt-0.5 mb-1">{t('kiosk.chiefComplaint','Chief Complaint')}</h2>
         <p className="text-xs text-slate-400 mb-5">{t('kiosk.describeComplaint','Describe your main complaint')}</p>
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
@@ -425,7 +485,7 @@ export default function PatientKiosk({ user }) {
     const questionText = t(currentQ.key, currentQ.text);
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
+        <div ref={cardRef} className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
           <StepBar />
           <div className="mb-5">
             <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1.5">
@@ -434,11 +494,11 @@ export default function PatientKiosk({ user }) {
             </div>
             <div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-gradient-to-r from-clinical-500 to-brand-500 h-2 rounded-full transition-all duration-500" style={{width:`${progress}%`}} /></div>
           </div>
-          <div className="bg-gradient-to-br from-clinical-50 to-slate-50 border border-clinical-100 rounded-2xl p-6 mb-5">
+          <div ref={qCardRef} className="bg-gradient-to-br from-clinical-50 to-slate-50 border border-clinical-100 rounded-2xl p-6 mb-5">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <span className="text-[11px] font-extrabold text-clinical-600 uppercase tracking-wider">{currentQ.section}</span>
-                <h3 className="text-lg sm:text-xl font-black text-slate-900 mt-1 leading-snug">{questionText}</h3>
+                <h3 ref={headingRef} className="text-lg sm:text-xl font-black text-slate-900 mt-1 leading-snug">{questionText}</h3>
               </div>
               <button onClick={speakQuestion} title="Read aloud" className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sm hover:bg-slate-50 shadow-sm transition font-bold">&#128266;</button>
             </div>
@@ -477,10 +537,10 @@ export default function PatientKiosk({ user }) {
 
   if (step === 4) return (
     <div className="max-w-2xl mx-auto">
-      <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
+      <div ref={cardRef} className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-10">
         <StepBar />
         <span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">{t('kiosk.step5', 'Step 5 of 6')}</span>
-        <h2 className="text-2xl font-black font-heading text-slate-900 mt-0.5 mb-1">{t('kiosk.uploadRecords','Upload Medical Records')}</h2>
+        <h2 ref={headingRef} className="text-2xl font-black font-heading text-slate-900 mt-0.5 mb-1">{t('kiosk.uploadRecords','Upload Medical Records')}</h2>
         <p className="text-xs text-slate-400 mb-6">Upload X-Rays, Lab Reports, Prescriptions. AI will analyze them.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {fileList.map((item, idx) => (
@@ -537,14 +597,14 @@ export default function PatientKiosk({ user }) {
 
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-8">
+        <div ref={cardRef} className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-xl p-6 sm:p-8">
           <StepBar />
 
           {/* Header with print button */}
           <div className="flex items-start justify-between mb-5">
             <div>
               <span className="text-xs font-bold text-clinical-600 uppercase tracking-wider">Step 6 of 6</span>
-              <h2 className="text-2xl font-black font-heading text-slate-900 mt-0.5">Review & Submit</h2>
+              <h2 ref={headingRef} className="text-2xl font-black font-heading text-slate-900 mt-0.5">Review & Submit</h2>
               <p className="text-xs text-slate-400 mt-0.5">Verify your information before submitting to the OPD system.</p>
             </div>
             <button onClick={printReview} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold shadow hover:bg-slate-800 transition-all flex-shrink-0">

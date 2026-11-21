@@ -110,55 +110,135 @@ code {
   background: var(--code-bg);
 }
 
-/* Accessibility Mode / High Contrast Styling */
+/* Accessibility Mode / High Contrast & Clean Text Scaling */
 .accessibility-mode {
-  --tw-bg-opacity: 1;
-  background-color: rgb(15 23 42 / var(--tw-bg-opacity)); /* slate-900 */
-  color: #f8fafc; /* slate-50 */
+  font-size: 1.05rem;
+  line-height: 1.6;
+  background-color: #090d16 !important;
+  color: #f8fafc !important;
 }
 
-.accessibility-mode * {
-  border-color: #fbbf24 !important; /* yellow-400 */
-  box-shadow: none !important;
-}
-
+/* Headings: High-contrast amber */
 .accessibility-mode h1, 
 .accessibility-mode h2, 
 .accessibility-mode h3, 
 .accessibility-mode h4, 
 .accessibility-mode h5, 
-.accessibility-mode h6 {
-  font-size: 1.25em !important;
-  color: #facc15 !important; /* yellow-400 */
+.accessibility-mode h6,
+.accessibility-mode .font-heading {
+  color: #fbbf24 !important; /* Amber-400 */
+  font-weight: 800 !important;
 }
 
-.accessibility-mode p, 
-.accessibility-mode span, 
-.accessibility-mode div {
-  font-size: 1.1em;
+/* Base text contrast - clean readable colors */
+.accessibility-mode p,
+.accessibility-mode label {
+  color: #f1f5f9 !important;
 }
 
-.accessibility-mode button, 
+.accessibility-mode .text-slate-900,
+.accessibility-mode .text-slate-800,
+.accessibility-mode .text-slate-700 {
+  color: #ffffff !important;
+}
+
+.accessibility-mode .text-slate-600,
+.accessibility-mode .text-slate-500,
+.accessibility-mode .text-slate-400 {
+  color: #cbd5e1 !important; /* Slate-300 for readable secondary text */
+}
+
+.accessibility-mode .text-clinical-600,
+.accessibility-mode .text-clinical-700 {
+  color: #38bdf8 !important; /* Sky-400 */
+}
+
+.accessibility-mode .text-emerald-700,
+.accessibility-mode .text-emerald-600 {
+  color: #34d399 !important; /* Emerald-400 */
+}
+
+/* All panel cards: Crisp dark slate container instead of light/translucent white */
+.accessibility-mode [class*="bg-white"],
+.accessibility-mode [class*="bg-slate-50"],
+.accessibility-mode [class*="bg-slate-100"],
+.accessibility-mode [class*="bg-slate-200"] {
+  background-color: #111827 !important;
+  color: #f9fafb !important;
+}
+
+.accessibility-mode [class*="border-slate-200"],
+.accessibility-mode [class*="border-slate-100"],
+.accessibility-mode [class*="border-slate-300"] {
+  border-color: #374151 !important;
+}
+
+/* Form Inputs, Selects, and Textareas */
 .accessibility-mode input, 
 .accessibility-mode select, 
 .accessibility-mode textarea {
-  background-color: #000 !important;
-  color: #fff !important;
-  font-size: 1.1em !important;
-  border: 2px solid #fbbf24 !important;
+  background-color: #030712 !important;
+  color: #ffffff !important;
+  border: 2px solid #64748b !important;
+  border-radius: 0.75rem !important;
+  font-size: 1rem !important;
 }
 
-.accessibility-mode .bg-white,
-.accessibility-mode .bg-slate-50,
-.accessibility-mode .bg-slate-100 {
-  background-color: #000 !important;
+.accessibility-mode input:focus, 
+.accessibility-mode select:focus, 
+.accessibility-mode textarea:focus {
+  border-color: #fbbf24 !important;
+  outline: 2px solid #fbbf24 !important;
+  outline-offset: 1px !important;
 }
 
-.accessibility-mode .text-slate-400,
-.accessibility-mode .text-slate-500,
-.accessibility-mode .text-slate-600,
-.accessibility-mode .text-slate-700,
-.accessibility-mode .text-slate-800,
-.accessibility-mode .text-slate-900 {
-  color: #f8fafc !important;
+.accessibility-mode input::placeholder,
+.accessibility-mode textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Interactive Action Buttons */
+.accessibility-mode button:not([class*="bg-gradient"]):not([class*="bg-clinical"]):not([class*="bg-emerald"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-yellow"]):not([class*="bg-red"]) {
+  background-color: #1f2937 !important;
+  color: #ffffff !important;
+  border: 1.5px solid #4b5563 !important;
+}
+
+.accessibility-mode button:hover {
+  border-color: #fbbf24 !important;
+}
+
+/* Step Bar indicators in PatientKiosk */
+.accessibility-mode .bg-slate-100.text-slate-400 {
+  background-color: #1e293b !important;
+  color: #94a3b8 !important;
+  border-color: #475569 !important;
+}
+
+.accessibility-mode .border-clinical-600.bg-white {
+  background-color: #fbbf24 !important;
+  color: #0f172a !important;
+  border-color: #f59e0b !important;
+  font-weight: 900 !important;
+}
+
+/* Care Mode selection cards */
+.accessibility-mode .bg-clinical-50 {
+  background-color: #0c4a6e !important;
+  border-color: #38bdf8 !important;
+}
+
+.accessibility-mode .bg-emerald-50 {
+  background-color: #064e3b !important;
+  border-color: #34d399 !important;
+}
+
+/* Printable slip should retain legible print styling */
+.accessibility-mode #printable-slip {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.accessibility-mode #printable-slip * {
+  color: #0f172a !important;
 }

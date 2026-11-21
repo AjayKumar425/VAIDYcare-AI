@@ -36,7 +36,8 @@ const EncounterSchema = new mongoose.Schema({
     age: { type: Number, required: true },
     gender: { type: String, default: 'Male' },
     phone: { type: String, default: '' },
-    abha_id: { type: String, default: null }
+    abha_id: { type: String, default: null },
+    blood_group: { type: String, default: '' }
   },
   care_mode: { type: String, default: 'general' },
   chief_complaint: { type: String, required: true },
