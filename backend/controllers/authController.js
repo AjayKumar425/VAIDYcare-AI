@@ -12,24 +12,46 @@ const generateToken = (user) => {
 // Register Doctor or Patient
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role, phone, specialization, licenseNumber, age, gender, abhaId, bloodGroup } = req.body;
+    const { name, email, password, role, phone, specialization, licenseNumber, age, gender, abhaId } = req.body;
 
+    // ── Check email uniqueness ────────────────────────────────────────────────
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'User already exists with this email' });
+    }
+
+    // ── Check ABHA ID uniqueness (patients only) ──────────────────────────────
+    if (normalizedRole === 'PATIENT' && abhaId) {
+      const abhaConflict = await User.findOne({ abhaId });
+      if (abhaConflict) {
+        return res.status(400).json({
+          success: false,
+          message: 'A patient account already exists with this ABHA ID'
+        });
+      }
+    }
+
+    // ── Auto-generate a unique Patient ID (patients only) ─────────────────────
+    let patientId = null;
+    if (normalizedRole === 'PATIENT') {
+      // Retry if collision (extremely rare)
+      let attempts = 0;
+      do {
+        patientId = User.generatePatientId();
+        attempts++;
+      } while (attempts < 5 && await User.findOne({ patientId }));
     }
 
     const user = new User({
       name,
       email,
       password,
-      role: role.toUpperCase(),
+      role: normalizedRole,
       phone,
       specialization: role.toUpperCase() === 'DOCTOR' ? specialization : undefined,
       licenseNumber: role.toUpperCase() === 'DOCTOR' ? licenseNumber : undefined,
       age: role.toUpperCase() === 'PATIENT' ? age : undefined,
       gender: role.toUpperCase() === 'PATIENT' ? gender : undefined,
-      bloodGroup: role.toUpperCase() === 'PATIENT' ? bloodGroup : undefined,
       abhaId: role.toUpperCase() === 'PATIENT' ? abhaId : undefined
     });
 
@@ -42,13 +64,13 @@ exports.register = async (req, res) => {
       token,
       user: {
         id: user._id,
+        patientId: user.patientId,
         name: user.name,
         email: user.email,
         role: user.role,
         phone: user.phone,
         age: user.age,
-        gender: user.gender,
-        bloodGroup: user.bloodGroup || ''
+        gender: user.gender
       }
     });
   } catch (error) {

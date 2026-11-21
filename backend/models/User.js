@@ -1,6 +1,15 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+// ─── Helper: Generate unique Patient ID ──────────────────────────────────────
+// Format: P-YYYYMMDD-XXXX  (e.g. P-20241001-4821)
+function generatePatientId() {
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+  const rand = Math.floor(1000 + Math.random() * 9000);              // 4-digit
+  return `P-${datePart}-${rand}`;
+}
+
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -11,10 +20,12 @@ const UserSchema = new mongoose.Schema({
   licenseNumber: { type: String, default: '' },
   age: { type: Number },
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
-  bloodGroup: { type: String, default: '' },
   abhaId: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 });
+
+// ─── Export helper so controllers can reuse it ───────────────────────────────
+UserSchema.statics.generatePatientId = generatePatientId;
 
 // Fixed pre-save hook for Mongoose (no next parameter with async/await)
 UserSchema.pre('save', async function () {

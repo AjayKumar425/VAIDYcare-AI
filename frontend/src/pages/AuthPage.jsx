@@ -48,7 +48,7 @@ export default function AuthPage({ onLoginSuccess }) {
       ? { email: formData.email, password: formData.password, role }
       : { ...formData, role };
 
-    const targetUrl = `https://vaidycare-ai.onrender.com/api/auth/${isLogin ? 'login' : 'register'}`;
+    const targetUrl = `${API_BASE}/api/auth/${isLogin ? 'login' : 'register'}`;
 
     try {
       const res = await fetch(targetUrl, {
