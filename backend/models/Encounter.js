@@ -32,6 +32,7 @@ const DocumentSchema = new mongoose.Schema({
 const EncounterSchema = new mongoose.Schema({
   token_number: { type: String, required: true, unique: true },
   patient: {
+    patient_id: { type: String, default: null }, // e.g. P-20241001-4821 or walk-in auto-ID
     full_name: { type: String, required: true },
     age: { type: Number, required: true },
     gender: { type: String, default: 'Male' },
@@ -54,6 +55,18 @@ const EncounterSchema = new mongoose.Schema({
   documents: [DocumentSchema],
   qr_code_data: { type: String, required: true },
   status: { type: String, default: 'WAITING' },
+  doctor_notes: { type: String, default: '' },
+  soap_note: {
+    subjective:      { type: String, default: '' },
+    objective:       { type: String, default: '' },
+    assessment:      { type: String, default: '' },
+    plan:            { type: String, default: '' },
+    icd_codes:       [{ type: String }],
+    follow_up:       { type: String, default: '' },
+    generated_at:    { type: Date, default: null },
+    last_edited_at:  { type: Date, default: null },
+    is_finalized:    { type: Boolean, default: false }
+  },
   created_at: { type: Date, default: Date.now }
 });
 

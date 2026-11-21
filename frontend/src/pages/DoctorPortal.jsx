@@ -565,6 +565,20 @@ export default function DoctorPortal({ doctor }) {
   const [activeTab, setActiveTab] = useState('summary');
   const reportRef = useRef(null);
 
+  // ── SOAP Note state ──────────────────────────────────────────────────────
+  const [soapNote, setSoapNote] = useState(null);       // current SOAP object
+  const [soapLoading, setSoapLoading] = useState(false);
+  const [soapSaving, setSoapSaving] = useState(false);
+  const [soapSaved, setSoapSaved] = useState(false);
+  const [soapError, setSoapError] = useState('');
+  const [soapEdits, setSoapEdits] = useState({ subjective:'', objective:'', assessment:'', plan:'', follow_up:'', icd_codes:[] });
+
+  // ── Patient EHR Timeline state ───────────────────────────────────────────
+  const [ehrHistory, setEhrHistory] = useState(null);
+  const [ehrLoading, setEhrLoading] = useState(false);
+  const [ehrError, setEhrError] = useState('');
+  const [expandedEhr, setExpandedEhr] = useState(null);
+
   const printReport = () => {
     const el = reportRef.current;
     if (!el) return;
@@ -588,6 +602,9 @@ export default function DoctorPortal({ doctor }) {
     const targetToken = (tokenToFetch || tokenInput).trim();
     if (!targetToken) return;
     setError(''); setData(null); setLoading(true); setSaveSuccess(false); setEditMode(false);
+    // Reset SOAP + EHR state on new encounter load
+    setSoapNote(null); setSoapEdits({ subjective:'', objective:'', assessment:'', plan:'', follow_up:'', icd_codes:[] });
+    setEhrHistory(null); setEhrError(''); setSoapError('');
     try {
       const res = await fetch(`${API_BASE}/api/doctor/encounter/${targetToken}`);
       const result = await res.json();
@@ -602,8 +619,83 @@ export default function DoctorPortal({ doctor }) {
         doctor_notes: enc.doctor_notes || '',
         status: enc.status || 'IN_PROGRESS',
       });
+      // Pre-load saved SOAP note if it exists
+      if (enc.soap_note && (enc.soap_note.subjective || enc.soap_note.assessment)) {
+        setSoapNote(enc.soap_note);
+        setSoapEdits({
+          subjective:  enc.soap_note.subjective  || '',
+          objective:   enc.soap_note.objective   || '',
+          assessment:  enc.soap_note.assessment  || '',
+          plan:        enc.soap_note.plan        || '',
+          follow_up:   enc.soap_note.follow_up   || '',
+          icd_codes:   enc.soap_note.icd_codes   || [],
+        });
+      }
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
+  };
+
+  // ── Generate SOAP Note via Gemini ──────────────────────────────────────
+  const handleGenerateSoap = async () => {
+    const targetToken = tokenInput.trim();
+    if (!targetToken) return;
+    setSoapLoading(true); setSoapError(''); setSoapSaved(false);
+    try {
+      const res = await fetch(`${API_BASE}/api/doctor/encounter/${targetToken}/soap`, { method: 'POST' });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'SOAP generation failed');
+      const note = result.soap_note;
+      setSoapNote(note);
+      setSoapEdits({
+        subjective:  note.subjective  || '',
+        objective:   note.objective   || '',
+        assessment:  note.assessment  || '',
+        plan:        note.plan        || '',
+        follow_up:   note.follow_up   || '',
+        icd_codes:   note.icd_codes   || [],
+      });
+    } catch (err) { setSoapError(err.message); }
+    finally { setSoapLoading(false); }
+  };
+
+  // ── Save edited SOAP Note ─────────────────────────────────────────────
+  const handleSaveSoap = async (finalize = false) => {
+    const targetToken = tokenInput.trim();
+    if (!targetToken) return;
+    setSoapSaving(true); setSoapError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/doctor/encounter/${targetToken}/soap`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...soapEdits, is_finalized: finalize }),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Save failed');
+      setSoapNote(result.soap_note);
+      setSoapSaved(true);
+      setTimeout(() => setSoapSaved(false), 3000);
+    } catch (err) { setSoapError(err.message); }
+    finally { setSoapSaving(false); }
+  };
+
+  // ── Fetch Patient EHR History ─────────────────────────────────────────
+  const handleFetchEhr = async () => {
+    const phone   = patient?.phone;
+    const abha_id = patient?.abha_id;
+    const currentToken = encounter?.token_number || tokenInput;
+    if (!phone && !abha_id) { setEhrError('No phone or ABHA ID on record — cannot look up history.'); return; }
+    setEhrLoading(true); setEhrError(''); setEhrHistory(null);
+    try {
+      const params = new URLSearchParams();
+      if (phone)    params.set('phone', phone);
+      if (abha_id)  params.set('abha_id', abha_id);
+      if (currentToken) params.set('exclude_token', currentToken);
+      const res = await fetch(`${API_BASE}/api/doctor/patient-history?${params}`);
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'History lookup failed');
+      setEhrHistory(result);
+    } catch (err) { setEhrError(err.message); }
+    finally { setEhrLoading(false); }
   };
 
   const saveEdits = async () => {
@@ -792,7 +884,7 @@ export default function DoctorPortal({ doctor }) {
           </div>
 
           {/* ── TABS ─────────────────────────────────────────────────────── */}
-          <div className="flex flex-wrap gap-1 bg-white border border-slate-200 rounded-2xl p-1 shadow-sm w-fit">
+          <div className="flex flex-wrap gap-1 bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
             {[
               {id:'summary',label:'Clinical Summary'},
               {id:'report',label:'Essential Report'},
@@ -800,11 +892,17 @@ export default function DoctorPortal({ doctor }) {
               {id:'ayush',label:'Dashavidha Pariksha',disabled:!ayushData},
               {id:'documents',label:`Documents (${docs.length})`},
               {id:'rx',label:'💊 Rx Scanner'},
+              {id:'soap',label:'🩺 SOAP Note'},
+              {id:'ehr',label:'📋 Patient History'},
             ].map(tab => (
               <button key={tab.id} disabled={tab.disabled} onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
                   activeTab === tab.id
-                    ? tab.id === 'report' ? 'bg-gradient-to-r from-rose-600 to-clinical-600 text-white shadow-sm' : tab.id === 'rx' ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm' : 'bg-clinical-600 text-white shadow-sm'
+                    ? tab.id === 'report' ? 'bg-gradient-to-r from-rose-600 to-clinical-600 text-white shadow-sm'
+                      : tab.id === 'rx' ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm'
+                      : tab.id === 'soap' ? 'bg-gradient-to-r from-clinical-600 to-teal-600 text-white shadow-sm'
+                      : tab.id === 'ehr' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
+                      : 'bg-clinical-600 text-white shadow-sm'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}>{tab.label}</button>
             ))}
@@ -919,6 +1017,302 @@ export default function DoctorPortal({ doctor }) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── TAB: SOAP NOTE GENERATOR ──────────────────────────────────── */}
+          {activeTab === 'soap' && (
+            <div className="space-y-4">
+              {/* Header bar */}
+              <div className="bg-gradient-to-r from-teal-900 via-clinical-900 to-slate-900 rounded-3xl p-5 sm:p-6 border border-teal-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-teal-600/30 border border-teal-500/40 flex items-center justify-center text-2xl shadow-inner">🩺</div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-teal-400 mb-0.5">Gemini AI</div>
+                    <div className="text-xl font-black text-white font-heading tracking-tight">Clinical SOAP Note Generator</div>
+                    <div className="text-xs text-slate-400 font-medium mt-0.5">Auto-generate from triage data · Edit · Finalize</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {soapNote?.is_finalized ? (
+                    <>
+                      <span className="px-3 py-1.5 rounded-xl bg-emerald-900/60 text-emerald-300 border border-emerald-700 text-xs font-black">✓ Finalized</span>
+                      <button onClick={() => handleSaveSoap(false)} className="px-4 py-2 rounded-xl border border-slate-600 text-slate-300 text-xs font-bold hover:bg-slate-800 transition-all">Unlock Note</button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleGenerateSoap}
+                        disabled={soapLoading}
+                        className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-teal-500 to-clinical-500 text-white text-xs font-extrabold shadow-lg hover:from-teal-400 hover:to-clinical-400 transition-all disabled:opacity-60 flex items-center gap-2"
+                      >
+                        {soapLoading ? (<><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Generating...</>) : (<>✨ {soapNote ? 'Regenerate' : 'Generate SOAP Note'}</>)}
+                      </button>
+                      {soapNote && (
+                        <>
+                          <button onClick={() => handleSaveSoap(false)} disabled={soapSaving} className="px-4 py-2 rounded-xl bg-slate-700 text-white text-xs font-bold hover:bg-slate-600 transition-all disabled:opacity-60">{soapSaving ? 'Saving...' : 'Save Draft'}</button>
+                          <button onClick={() => handleSaveSoap(true)} disabled={soapSaving} className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-600 transition-all disabled:opacity-60">Finalize ✓</button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {soapSaved && <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-2"><span>✓</span> SOAP note saved successfully.</div>}
+              {soapError && <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">Error: {soapError}</div>}
+
+              {/* Loading skeleton */}
+              {soapLoading && (
+                <div className="space-y-3">
+                  {['Subjective','Objective','Assessment','Plan'].map(label => (
+                    <div key={label} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse">
+                      <div className="h-3 w-24 bg-slate-200 rounded mb-3" />
+                      <div className="space-y-2">
+                        <div className="h-3 bg-slate-100 rounded w-full" />
+                        <div className="h-3 bg-slate-100 rounded w-4/5" />
+                        <div className="h-3 bg-slate-100 rounded w-3/5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* SOAP sections */}
+              {!soapLoading && soapNote && (
+                <div className="space-y-3">
+                  {[
+                    { key:'subjective',  label:'S — Subjective',  icon:'🗣️', color:'border-l-blue-400',   hint:'Patient\'s own description of symptoms and history' },
+                    { key:'objective',   label:'O — Objective',   icon:'📊', color:'border-l-indigo-400', hint:'Observable findings, vitals, document analysis' },
+                    { key:'assessment',  label:'A — Assessment',  icon:'🧠', color:'border-l-rose-400',   hint:'Clinical interpretation, differential diagnoses' },
+                    { key:'plan',        label:'P — Plan',        icon:'📝', color:'border-l-teal-400',   hint:'Investigations, medications, referrals, management' },
+                    { key:'follow_up',   label:'Follow-up',       icon:'📅', color:'border-l-amber-400',  hint:'When to return, what to monitor' },
+                  ].map(({ key, label, icon, color, hint }) => (
+                    <div key={key} className={`bg-white rounded-2xl border border-slate-200 border-l-4 ${color} p-5 shadow-sm transition-all hover:shadow-md`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{icon}</span>
+                          <span className="text-xs font-black text-slate-800 uppercase tracking-wider">{label}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium italic">{hint}</span>
+                      </div>
+                      {soapNote.is_finalized ? (
+                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{soapEdits[key] || '—'}</p>
+                      ) : (
+                        <textarea
+                          rows={key === 'follow_up' ? 2 : 4}
+                          value={soapEdits[key]}
+                          onChange={e => setSoapEdits(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="w-full text-sm text-slate-800 leading-relaxed bg-slate-50 focus:bg-white rounded-xl border border-slate-200 px-3 py-2.5 outline-none resize-none focus:border-clinical-400 focus:ring-2 focus:ring-clinical-100 transition-all font-medium"
+                          placeholder={`Enter ${label.split('—')[1]?.trim() || label}...`}
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                  {/* ICD Codes */}
+                  <div className="bg-white rounded-2xl border border-slate-200 border-l-4 border-l-violet-400 p-5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">🏷️</span>
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wider">ICD-10 Codes</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(soapEdits.icd_codes || []).map((code, i) => (
+                        <div key={i} className="flex items-center gap-1 bg-violet-50 border border-violet-200 rounded-xl px-3 py-1.5">
+                          <span className="text-xs font-bold text-violet-800 font-mono">{code}</span>
+                          {!soapNote.is_finalized && (
+                            <button onClick={() => setSoapEdits(prev => ({ ...prev, icd_codes: prev.icd_codes.filter((_, j) => j !== i) }))} className="text-violet-400 hover:text-rose-500 ml-1 font-black text-xs transition-colors">×</button>
+                          )}
+                        </div>
+                      ))}
+                      {!soapNote.is_finalized && (
+                        <button
+                          onClick={() => {
+                            const code = prompt('Enter ICD-10 code (e.g. R05.9: Cough):');
+                            if (code?.trim()) setSoapEdits(prev => ({ ...prev, icd_codes: [...prev.icd_codes, code.trim()] }));
+                          }}
+                          className="px-3 py-1.5 rounded-xl border-2 border-dashed border-violet-300 text-violet-500 text-xs font-bold hover:border-violet-400 hover:text-violet-700 transition-all"
+                        >+ Add Code</button>
+                      )}
+                      {(soapEdits.icd_codes || []).length === 0 && <span className="text-xs text-slate-400 italic">No ICD codes — generate a note first.</span>}
+                    </div>
+                  </div>
+
+                  {/* Metadata footer */}
+                  <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-400 font-medium px-1">
+                    {soapNote.generated_at && <span>Generated: {new Date(soapNote.generated_at).toLocaleString()}</span>}
+                    {soapNote.last_edited_at && <span>Last saved: {new Date(soapNote.last_edited_at).toLocaleString()}</span>}
+                    {soapNote.is_finalized && <span className="text-emerald-600 font-bold">✓ This note is finalized and locked.</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!soapLoading && !soapNote && (
+                <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-12 text-center">
+                  <div className="w-16 h-16 rounded-3xl bg-teal-50 border border-teal-100 flex items-center justify-center text-3xl mx-auto mb-4">🩺</div>
+                  <div className="text-base font-black text-slate-800 mb-1">No SOAP Note Yet</div>
+                  <div className="text-xs text-slate-400 mb-5 max-w-xs mx-auto">Click <strong>Generate SOAP Note</strong> to automatically create a structured clinical note from the patient's triage data using Gemini AI.</div>
+                  <button onClick={handleGenerateSoap} disabled={soapLoading} className="px-6 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-clinical-500 text-white text-xs font-extrabold shadow-lg hover:from-teal-400 hover:to-clinical-400 transition-all">✨ Generate SOAP Note</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── TAB: PATIENT EHR TIMELINE ──────────────────────────────────── */}
+          {activeTab === 'ehr' && (
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-900 via-violet-900 to-slate-900 rounded-3xl p-5 sm:p-6 border border-indigo-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-2xl shadow-inner">📋</div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-0.5">Electronic Health Record</div>
+                    <div className="text-xl font-black text-white font-heading tracking-tight">Patient Visit Timeline</div>
+                    <div className="text-xs text-slate-400 font-medium mt-0.5">
+                      {patient?.phone ? `Matched by phone: ${patient.phone}` : ''}
+                      {patient?.abha_id ? ` · ABHA: ${patient.abha_id}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleFetchEhr}
+                  disabled={ehrLoading}
+                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-xs font-extrabold shadow-lg hover:from-indigo-400 hover:to-violet-400 transition-all disabled:opacity-60 flex items-center gap-2"
+                >
+                  {ehrLoading ? (<><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Loading...</>) : (<>🔍 {ehrHistory ? 'Refresh' : 'Load History'}</>)}
+                </button>
+              </div>
+
+              {ehrError && <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">Error: {ehrError}</div>}
+
+              {/* Loading skeleton */}
+              {ehrLoading && (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 bg-slate-200 rounded-xl" />
+                        <div className="space-y-2 flex-1">
+                          <div className="h-3 bg-slate-200 rounded w-32" />
+                          <div className="h-2.5 bg-slate-100 rounded w-48" />
+                        </div>
+                        <div className="h-6 w-16 bg-slate-200 rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* History loaded */}
+              {!ehrLoading && ehrHistory && (
+                <div className="space-y-3">
+                  {/* Stats bar */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Total Visits', value: ehrHistory.total_visits, color: 'bg-indigo-50 text-indigo-800 border-indigo-200' },
+                      { label: 'Prior Visits', value: ehrHistory.encounters.length, color: 'bg-violet-50 text-violet-800 border-violet-200' },
+                      { label: 'Patient', value: ehrHistory.patient_name, color: 'bg-slate-50 text-slate-800 border-slate-200', small: true },
+                    ].map(({ label, value, color, small }) => (
+                      <div key={label} className={`rounded-2xl border p-4 text-center ${color}`}>
+                        <div className={`font-black ${small ? 'text-sm truncate' : 'text-2xl'}`}>{value}</div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider mt-0.5 opacity-70">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {ehrHistory.encounters.length === 0 ? (
+                    <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-10 text-center">
+                      <div className="text-4xl mb-3">📋</div>
+                      <div className="text-sm font-bold text-slate-600">No previous visits found</div>
+                      <div className="text-xs text-slate-400 mt-1">This appears to be the patient's first visit.</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {ehrHistory.encounters.map((enc, i) => {
+                        const riskColors = {
+                          SEVERE:   'bg-rose-100 text-rose-800 border-rose-300',
+                          MODERATE: 'bg-amber-100 text-amber-800 border-amber-300',
+                          SAFE:     'bg-emerald-100 text-emerald-800 border-emerald-200',
+                        };
+                        const isExpanded = expandedEhr === enc.token_number;
+                        return (
+                          <div key={enc.token_number} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:border-indigo-200 hover:shadow-md transition-all">
+                            {/* Card header */}
+                            <button
+                              onClick={() => setExpandedEhr(isExpanded ? null : enc.token_number)}
+                              className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition-colors"
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-xs flex-shrink-0">
+                                #{ehrHistory.encounters.length - i}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-black text-slate-900 font-mono">{enc.token_number}</span>
+                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${riskColors[enc.risk_level] || riskColors.SAFE}`}>{enc.risk_level} RISK</span>
+                                  {enc.soap_note && <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">✓ SOAP</span>}
+                                  {enc.doc_count > 0 && <span className="text-[9px] font-bold text-slate-400">{enc.doc_count} doc{enc.doc_count > 1 ? 's' : ''}</span>}
+                                </div>
+                                <div className="text-xs text-slate-600 font-medium mt-0.5 truncate">"{enc.chief_complaint}"</div>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <div className="text-[10px] text-slate-400 font-medium">{new Date(enc.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
+                                <div className="text-[10px] text-slate-300 font-bold mt-0.5">{isExpanded ? '▲' : '▼'}</div>
+                              </div>
+                            </button>
+
+                            {/* Expanded details */}
+                            {isExpanded && (
+                              <div className="border-t border-slate-100 p-4 bg-slate-50/50 space-y-3">
+                                {enc.suspected_diseases?.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">🧠 AI Suspected Conditions</span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {enc.suspected_diseases.map((d, j) => (
+                                        <span key={j} className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl">
+                                          {typeof d === 'string' ? d : d.disease || 'Unknown'}{d.confidence ? ` (${d.confidence})` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {enc.soap_note && (
+                                  <div className="bg-teal-50 border border-teal-200 rounded-xl p-3">
+                                    <span className="text-[10px] font-black text-teal-600 uppercase tracking-wider block mb-1.5">🩺 SOAP Note (Finalized)</span>
+                                    <div className="text-xs text-slate-700 leading-relaxed">
+                                      <strong className="text-teal-700">Assessment:</strong> {enc.soap_note.assessment}
+                                    </div>
+                                    {enc.soap_note.icd_codes?.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-2">
+                                        {enc.soap_note.icd_codes.map((c, k) => <span key={k} className="text-[9px] font-mono font-bold px-2 py-0.5 bg-white border border-teal-300 text-teal-800 rounded-lg">{c}</span>)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                                  <span>Status: <strong className="text-slate-600">{enc.status}</strong></span>
+                                  <span>Mode: <strong className="text-slate-600 uppercase">{enc.care_mode}</strong></span>
+                                  <span>Risk Score: <strong className="text-slate-600">{enc.risk_score}/100</strong></span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Empty state before loading */}
+              {!ehrLoading && !ehrHistory && !ehrError && (
+                <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-12 text-center">
+                  <div className="w-16 h-16 rounded-3xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-3xl mx-auto mb-4">📋</div>
+                  <div className="text-base font-black text-slate-800 mb-1">View Patient's Visit History</div>
+                  <div className="text-xs text-slate-400 mb-5 max-w-xs mx-auto">Click <strong>Load History</strong> to fetch all past encounters for this patient, matched by phone number or ABHA ID.</div>
+                  <button onClick={handleFetchEhr} disabled={ehrLoading} className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-xs font-extrabold shadow-lg hover:from-indigo-400 hover:to-violet-400 transition-all">🔍 Load Patient History</button>
+                </div>
+              )}
             </div>
           )}
 

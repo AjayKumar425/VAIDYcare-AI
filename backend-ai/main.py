@@ -2,9 +2,18 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import re
+import os
+import shutil
+import tempfile
 from typing import Dict, Any, List, Optional
+from radiology_engine import analyze_uploaded_document
+from clinical_engine import predict_differential_diagnosis, generate_clinical_soap
 
-app = FastAPI(title="VAIDYcare-AI Python Microservice")
+# ── ML Model Manager (lazy-loaded singletons) ────────────────────────────────
+from ml_models.model_manager import MLModelManager
+_ml = MLModelManager.instance()
+
+app = FastAPI(title="VAIDYcare-AI Python Microservice — ML Edition")
 
 app.add_middleware(
     CORSMiddleware,
@@ -358,26 +367,68 @@ def analyze_complaint(req: ComplaintRequest):
 
 
 class DiagnosisRequest(BaseModel):
-    socrates_data: Dict[str, Any]
+    socrates_data: Dict[str, Any] = {}
+    chief_complaint: Optional[str] = ""
+    symptoms: Optional[List[str]] = []
+    document_findings: Optional[List[str]] = []
 
 @app.post("/api/ai/predict-diagnosis")
 def predict_diagnosis(req: DiagnosisRequest):
-    data = req.socrates_data
-    diagnoses = []
-    hpi = data.get("history_of_present_illness", {})
-    ros = data.get("review_of_systems", {})
-    if "chest" in str(hpi.get("radiation", "")).lower() or "chest" in str(ros.get("respiratory", "")).lower():
-        diagnoses.append({"disease": "Angina Pectoris", "probability": 0.85, "rationale": "Chest pain presence"})
-        diagnoses.append({"disease": "GERD", "probability": 0.60, "rationale": "Can mimic chest pain"})
-    if "stomach" in str(ros.get("gastrointestinal", "")).lower() or "vomit" in str(ros.get("gastrointestinal", "")).lower():
-        diagnoses.append({"disease": "Acute Gastroenteritis", "probability": 0.90, "rationale": "GI symptoms reported"})
-        diagnoses.append({"disease": "Food Poisoning", "probability": 0.75, "rationale": "Acute onset GI"})
-    if "fever" in str(ros.get("fever", "")).lower():
-        diagnoses.append({"disease": "Viral Infection", "probability": 0.80, "rationale": "Fever reported"})
-    if not diagnoses:
-        diagnoses = [{"disease": "Non-specific Viral Illness", "probability": 0.50, "rationale": "Insufficient data"}]
-    diagnoses = sorted(diagnoses, key=lambda x: x["probability"], reverse=True)[:3]
+    diagnoses = predict_differential_diagnosis(
+        socrates_data=req.socrates_data,
+        chief_complaint=req.chief_complaint or "",
+        symptoms=req.symptoms or [],
+        document_findings=req.document_findings or []
+    )
     return {"top_diagnoses": diagnoses}
+
+@app.post("/api/ai/analyze-document")
+async def analyze_document_endpoint(file: UploadFile = File(...)):
+    """
+    Multimodal Medical Document & Radiological Scan Analysis Endpoint.
+    Direct local ML replacement for Gemini multimodal API.
+    """
+    suffix = os.path.splitext(file.filename or "")[1] or ".jpg"
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
+
+        content_type = file.content_type or "image/jpeg"
+        result = analyze_uploaded_document(tmp_path, content_type)
+        return result
+    except Exception as e:
+        print(f"[analyze-document] Processing error: {e}")
+        return {
+            "doc_type": "RADIOLOGY_XRAY",
+            "category_label": "Radiology / Diagnostic Scan",
+            "predicted_condition": "Diagnostic Scan (Pending Manual Review)",
+            "one_line_summary": f"Document processed locally. Review required.",
+            "full_report_text": f"Error during local ML processing: {str(e)}",
+            "essential_bullet_points": [
+                {"text": "Scan received — queued for physician review", "flag": "YELLOW", "category": "Status"}
+            ],
+            "extracted_medications": [],
+            "biomarkers": [],
+            "suspected_conditions": [],
+            "risk_score": 30
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+@app.post("/api/ai/generate-soap")
+def generate_soap_endpoint(encounter: Dict[str, Any]):
+    """
+    Clinical SOAP Note Generation Endpoint.
+    Synthesizes Subjective, Objective, Assessment, Plan, and ICD-10 codes.
+    Direct local ML replacement for Gemini SOAP generator.
+    """
+    return generate_clinical_soap(encounter)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -858,3 +909,264 @@ def parse_prescription(req: PrescriptionRequest):
     result["patient_name"] = req.patient_name
     result["patient_age"]  = req.patient_age
     return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  ML MODEL ENDPOINTS  — CheXNet / BioBERT NER / XGBoost Risk Scorer
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── 1. CheXNet Chest X-Ray Classification ────────────────────────────────────
+@app.post("/api/ml/chexnet")
+async def chexnet_classify(file: UploadFile = File(...)):
+    """
+    CheXNet DenseNet-121 Chest X-Ray Multi-Label Classifier.
+
+    Detects up to 14 thoracic pathologies:
+    Atelectasis, Cardiomegaly, Effusion, Infiltration, Mass, Nodule,
+    Pneumonia, Pneumothorax, Consolidation, Edema, Emphysema, Fibrosis,
+    Pleural Thickening, Hernia.
+
+    Returns structured clinical findings with per-class confidence scores.
+    """
+    suffix = os.path.splitext(file.filename or "")[1] or ".jpg"
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
+
+        result = _ml.chexnet.predict(tmp_path)
+        return result
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "model": "CheXNet (DenseNet-121)",
+            "predicted_condition": "Analysis failed",
+            "pathologies": [],
+            "risk_score": 25,
+            "essential_bullet_points": [{"text": "CheXNet analysis error — physician review required", "flag": "YELLOW", "category": "Status"}],
+            "suspected_conditions": [],
+            "doc_type": "RADIOLOGY_XRAY"
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+# ── 2. CheXNet + Heuristic Combined Radiology Endpoint ───────────────────────
+@app.post("/api/ml/analyze-xray")
+async def analyze_xray_full(file: UploadFile = File(...)):
+    """
+    Full-pipeline chest X-ray analysis combining:
+      1. CheXNet DenseNet-121 ML classification
+      2. Heuristic bilateral density analysis
+      3. Merged, deduplicated clinical output
+
+    Use this endpoint for the highest accuracy radiology analysis
+    when the primary Gemini cascade fails.
+    """
+    suffix = os.path.splitext(file.filename or "")[1] or ".jpg"
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
+
+        # Run CheXNet
+        chexnet_result = _ml.chexnet.predict(tmp_path)
+
+        # Run heuristic engine for additional findings
+        heuristic_result = analyze_uploaded_document(tmp_path, file.content_type or "image/jpeg")
+
+        # Merge bullet points (CheXNet first, heuristic appended)
+        merged_bullets = chexnet_result.get("essential_bullet_points", [])
+        for bp in heuristic_result.get("essential_bullet_points", []):
+            # Avoid duplicating exact same finding text
+            if not any(b["text"] == bp["text"] for b in merged_bullets):
+                merged_bullets.append(bp)
+
+        # Merge suspected conditions
+        merged_conditions = chexnet_result.get("suspected_conditions", [])
+        for cond in heuristic_result.get("suspected_conditions", []):
+            if not any(c["disease"] == cond["disease"] for c in merged_conditions):
+                merged_conditions.append(cond)
+
+        final_risk = max(
+            chexnet_result.get("risk_score", 20),
+            heuristic_result.get("risk_score", 20)
+        )
+
+        return {
+            "doc_type": "RADIOLOGY_XRAY",
+            "category_label": "Radiology / Chest X-Ray (CheXNet + Heuristic)",
+            "predicted_condition": chexnet_result.get("predicted_condition") or heuristic_result.get("predicted_condition"),
+            "one_line_summary": chexnet_result.get("one_line_summary") or heuristic_result.get("one_line_summary"),
+            "full_report_text": heuristic_result.get("full_report_text", ""),
+            "essential_bullet_points": merged_bullets,
+            "suspected_conditions": merged_conditions,
+            "biomarkers": heuristic_result.get("biomarkers", []),
+            "extracted_medications": [],
+            "risk_score": final_risk,
+            "chexnet_pathologies": chexnet_result.get("pathologies", []),
+            "models_used": ["CheXNet (DenseNet-121)", "Heuristic Vision Engine"]
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "doc_type": "RADIOLOGY_XRAY",
+            "predicted_condition": "Analysis failed — physician review required",
+            "essential_bullet_points": [{"text": "X-ray analysis error", "flag": "YELLOW", "category": "Status"}],
+            "suspected_conditions": [],
+            "risk_score": 30
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+# ── 3. BioBERT Clinical Named Entity Recognition ──────────────────────────────
+class NERRequest(BaseModel):
+    text: str
+    include_summary: bool = True
+
+@app.post("/api/ml/ner")
+def biobert_ner(req: NERRequest):
+    """
+    BioBERT Named Entity Recognition endpoint.
+
+    Extracts clinical entities from free-text clinical notes, discharge
+    summaries, radiology reports, or patient complaints:
+      - Diseases & conditions
+      - Drug names & medications
+      - Clinical symptoms & signs
+      - Anatomical locations
+      - Lab markers & biomarkers
+
+    Backend: HuggingFace BioBERT (d4data/biomedical-ner-all) if available,
+             else spaCy + Medical Lexicon fallback.
+    """
+    if not req.text or not req.text.strip():
+        return {"error": "No text provided", "entities": {}}
+
+    return _ml.ner.extract_entities(req.text)
+
+
+# ── 4. XGBoost Clinical Risk Scoring ─────────────────────────────────────────
+class RiskScoringRequest(BaseModel):
+    biomarkers: List[Dict[str, Any]] = []
+    vitals: Dict[str, Any] = {}
+    symptoms: List[str] = []
+    red_flags: List[str] = []
+    age: int = 40
+    gender: str = "Male"
+
+@app.post("/api/ml/risk-score")
+def xgboost_risk_score(req: RiskScoringRequest):
+    """
+    XGBoost + NEWS2 Clinical Risk Scoring endpoint.
+
+    Computes a 0-100 risk score from:
+      - NEWS2 vital signs (Respiratory Rate, SpO2, BP, Pulse, Temp, Consciousness)
+      - Biomarker derangements (CBC, LFT, KFT, Glucose, HbA1c)
+      - Red flag symptom presence
+      - Patient age
+      - XGBoost ML signal (ensemble)
+
+    Returns: Risk level (LOW/MODERATE/HIGH), color (GREEN/YELLOW/RED),
+             NEWS2 score, feature contributions, and clinical recommendation.
+    """
+    return _ml.risk_scorer.score(
+        biomarkers=req.biomarkers,
+        vitals=req.vitals,
+        symptoms=req.symptoms,
+        red_flags=req.red_flags,
+        age=req.age,
+        gender=req.gender
+    )
+
+
+# ── 5. Full ML Triage Pipeline — Combined Endpoint ────────────────────────────
+class FullTriageRequest(BaseModel):
+    chief_complaint: str = ""
+    symptoms: List[str] = []
+    biomarkers: List[Dict[str, Any]] = []
+    vitals: Dict[str, Any] = {}
+    age: int = 40
+    gender: str = "Male"
+    red_flags: List[str] = []
+
+@app.post("/api/ml/full-triage")
+def full_ml_triage(req: FullTriageRequest):
+    """
+    Combined ML triage pipeline. Runs in sequence:
+      1. BioBERT NER on chief complaint + symptoms
+      2. XGBoost + NEWS2 Risk Scoring
+      3. Clinical Differential Diagnosis (from clinical_engine.py)
+
+    Returns a comprehensive, ML-enriched triage payload.
+    """
+    # Step 1: NER
+    full_text = req.chief_complaint + " " + " ".join(req.symptoms)
+    ner_result = _ml.ner.extract_entities(full_text) if full_text.strip() else {
+        "diseases": [], "drugs": [], "symptoms": [], "all_entities": []
+    }
+
+    # Step 2: XGBoost Risk Scoring
+    risk_result = _ml.risk_scorer.score(
+        biomarkers=req.biomarkers,
+        vitals=req.vitals,
+        symptoms=req.symptoms,
+        red_flags=req.red_flags,
+        age=req.age,
+        gender=req.gender
+    )
+
+    # Step 3: Differential Diagnosis
+    diag_result = predict_differential_diagnosis(
+        socrates_data={},
+        chief_complaint=req.chief_complaint,
+        symptoms=req.symptoms,
+        document_findings=[e["text"] for e in ner_result.get("all_entities", [])]
+    )
+
+    return {
+        "ner_entities":       ner_result,
+        "risk_assessment":    risk_result,
+        "differential_diag":  diag_result,
+        "overall_risk_score": risk_result.get("risk_score", 25),
+        "overall_risk_color": risk_result.get("risk_color", "YELLOW"),
+        "clinical_recommendation": risk_result.get("clinical_recommendation", ""),
+        "ml_summary": (
+            f"BioBERT identified {len(ner_result.get('all_entities', []))} clinical entities. "
+            f"XGBoost risk score: {risk_result.get('risk_score', 0)}/100 ({risk_result.get('risk_level', 'UNKNOWN')}). "
+            f"Top differential: {diag_result[0]['disease'] if diag_result else 'Undetermined'}."
+        )
+    }
+
+
+# ── 6. ML Model Health Status ─────────────────────────────────────────────────
+@app.get("/api/ml/status")
+def ml_model_status():
+    """
+    Returns the load status of all ML models.
+    Use this endpoint to verify CheXNet, BioBERT, and XGBoost are operational.
+    """
+    return {
+        "status": "operational",
+        "models": _ml.status(),
+        "available_endpoints": [
+            "POST /api/ml/chexnet          — CheXNet chest X-ray classification",
+            "POST /api/ml/analyze-xray     — CheXNet + heuristic merged analysis",
+            "POST /api/ml/ner              — BioBERT clinical NER",
+            "POST /api/ml/risk-score       — XGBoost + NEWS2 risk scoring",
+            "POST /api/ml/full-triage      — Combined ML triage pipeline",
+        ]
+    }

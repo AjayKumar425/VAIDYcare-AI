@@ -13,23 +13,48 @@ const generateToken = (user) => {
 exports.register = async (req, res) => {
   try {
     const { name, email, password, role, phone, specialization, licenseNumber, age, gender, abhaId } = req.body;
+    const normalizedRole = role.toUpperCase();
 
+    // ── Check email uniqueness ────────────────────────────────────────────────
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'User already exists with this email' });
+    }
+
+    // ── Check ABHA ID uniqueness (patients only) ──────────────────────────────
+    if (normalizedRole === 'PATIENT' && abhaId) {
+      const abhaConflict = await User.findOne({ abhaId });
+      if (abhaConflict) {
+        return res.status(400).json({
+          success: false,
+          message: 'A patient account already exists with this ABHA ID'
+        });
+      }
+    }
+
+    // ── Auto-generate a unique Patient ID (patients only) ─────────────────────
+    let patientId = null;
+    if (normalizedRole === 'PATIENT') {
+      // Retry if collision (extremely rare)
+      let attempts = 0;
+      do {
+        patientId = User.generatePatientId();
+        attempts++;
+      } while (attempts < 5 && await User.findOne({ patientId }));
     }
 
     const user = new User({
       name,
       email,
       password,
-      role: role.toUpperCase(),
+      role: normalizedRole,
       phone,
-      specialization: role.toUpperCase() === 'DOCTOR' ? specialization : undefined,
-      licenseNumber: role.toUpperCase() === 'DOCTOR' ? licenseNumber : undefined,
-      age: role.toUpperCase() === 'PATIENT' ? age : undefined,
-      gender: role.toUpperCase() === 'PATIENT' ? gender : undefined,
-      abhaId: role.toUpperCase() === 'PATIENT' ? abhaId : undefined
+      specialization: normalizedRole === 'DOCTOR' ? specialization : undefined,
+      licenseNumber: normalizedRole === 'DOCTOR' ? licenseNumber : undefined,
+      age: normalizedRole === 'PATIENT' ? age : undefined,
+      gender: normalizedRole === 'PATIENT' ? gender : undefined,
+      abhaId: normalizedRole === 'PATIENT' ? (abhaId || null) : undefined,
+      patientId: normalizedRole === 'PATIENT' ? patientId : undefined
     });
 
     await user.save();
@@ -41,12 +66,14 @@ exports.register = async (req, res) => {
       token,
       user: {
         id: user._id,
+        patientId: user.patientId,
         name: user.name,
         email: user.email,
         role: user.role,
         phone: user.phone,
         age: user.age,
-        gender: user.gender
+        gender: user.gender,
+        abhaId: user.abhaId
       }
     });
   } catch (error) {

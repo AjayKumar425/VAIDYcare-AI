@@ -6,6 +6,15 @@ const axios = require('axios');
 
 const PYTHON_AI_URL = 'http://localhost:8000';
 
+// ─── Generate walk-in patient ID ────────────────────────────────────────────────
+// Registered patients pass their patientId; walk-ins get a W-YYYYMMDD-XXXX
+function generateWalkInId() {
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `W-${datePart}-${rand}`;
+}
+
 exports.submitKioskSession = async (req, res) => {
   try {
     const {
@@ -14,6 +23,7 @@ exports.submitKioskSession = async (req, res) => {
       gender,
       phone,
       abhaId,
+      patientId,          // optional: passed when a registered patient uses the kiosk
       chiefComplaint,
       symptoms,
       careMode = 'general',
@@ -30,6 +40,9 @@ exports.submitKioskSession = async (req, res) => {
     if (interviewAnswers) {
       parsedAnswers = typeof interviewAnswers === 'string' ? JSON.parse(interviewAnswers) : interviewAnswers;
     }
+
+    // 0. Resolve patient_id: use registered ID if provided, else generate walk-in ID
+    const resolvedPatientId = (patientId && patientId.trim()) ? patientId.trim() : generateWalkInId();
 
     // 1. Generate Token Number (e.g., V-4821)
     const tokenNumber = 'V-' + Math.floor(1000 + Math.random() * 9000);
@@ -52,11 +65,67 @@ exports.submitKioskSession = async (req, res) => {
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         let aiResult = null;
+
+        // ── Tier 1–3: Cloud AI Cascade (Gemini Primary → Fallback → Groq) ─────
         try {
-          console.log(`Analyzing document: ${file.originalname} (${file.mimetype})`);
+          console.log(`[Tier 1-3] Analyzing document: ${file.originalname} (${file.mimetype})`);
           aiResult = await analyzeMedicalDocument(file.path, file.mimetype);
         } catch (err) {
-          console.error(`Gemini analysis failed for ${file.originalname}:`, err.message);
+          console.error(`[Tier 1-3] Cloud AI failed for ${file.originalname}:`, err.message);
+        }
+
+        const isPendingFallback = aiResult && aiResult.one_line_summary && aiResult.one_line_summary.includes('AI analysis pending');
+
+        // ── Tier 4a: CheXNet DenseNet-121 (for radiograph/image files) ────────
+        if ((!aiResult || isPendingFallback) && file.mimetype && file.mimetype.startsWith('image/')) {
+          try {
+            console.log(`[Tier 4a] Running CheXNet ML on: ${file.originalname}`);
+            const FormData = require('form-data');
+            const fs = require('fs');
+            const formData = new FormData();
+            formData.append('file', fs.createReadStream(file.path), {
+              filename: file.originalname,
+              contentType: file.mimetype
+            });
+            const chexRes = await axios.post(`${PYTHON_AI_URL}/api/ml/analyze-xray`, formData, {
+              headers: formData.getHeaders(),
+              timeout: 25000,
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity
+            });
+            if (chexRes.data && chexRes.data.predicted_condition) {
+              aiResult = chexRes.data;
+              console.log(`[Tier 4a] CheXNet SUCCESS: ${aiResult.predicted_condition}`);
+            }
+          } catch (err) {
+            console.warn(`[Tier 4a] CheXNet failed for ${file.originalname}:`, err.message);
+          }
+        }
+
+        // ── Tier 4b: Local Heuristic Python Engine (final fallback) ───────────
+        if (!aiResult || isPendingFallback) {
+          try {
+            console.log(`[Tier 4b] Running heuristic engine on: ${file.originalname}`);
+            const FormData = require('form-data');
+            const fs = require('fs');
+            const formData = new FormData();
+            formData.append('file', fs.createReadStream(file.path), {
+              filename: file.originalname,
+              contentType: file.mimetype
+            });
+            const localRes = await axios.post(`${PYTHON_AI_URL}/api/ai/analyze-document`, formData, {
+              headers: formData.getHeaders(),
+              timeout: 15000,
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity
+            });
+            if (localRes.data) {
+              aiResult = localRes.data;
+              console.log(`[Tier 4b] Heuristic engine SUCCESS`);
+            }
+          } catch (err) {
+            console.warn(`[Tier 4b] Heuristic engine also failed:`, err.message);
+          }
         }
 
         if (aiResult) {
@@ -171,11 +240,14 @@ exports.submitKioskSession = async (req, res) => {
       console.log('Python Keyword Flagging Engine offline or error:', err.message);
     }
 
-    // 7. Call Python Differential Diagnosis Prediction
+    // 7. Call Python Differential Diagnosis Prediction (incorporating HPI, symptoms, & scan findings)
     let aiDiagnoses = [];
     try {
       const diagRes = await axios.post(`${PYTHON_AI_URL}/api/ai/predict-diagnosis`, {
-        socrates_data: structuredHpi
+        socrates_data: structuredHpi,
+        chief_complaint: chiefComplaint || '',
+        symptoms: parsedSymptoms,
+        document_findings: documentFindings
       });
       if (diagRes.data && diagRes.data.top_diagnoses) {
         aiDiagnoses = diagRes.data.top_diagnoses.map(d => ({
@@ -240,12 +312,14 @@ exports.submitKioskSession = async (req, res) => {
       ].filter(Boolean).join(' ')
     };
 
-    // 9. Generate QR Code
+    // 9. Generate QR Code  ─ now includes patient_id so scanner can uniquely ID the patient
     const qrPayload = JSON.stringify({
       tokenNumber,
+      patientId: resolvedPatientId,
       patientName: fullName,
       age,
       gender,
+      abhaId: abhaId || null,
       riskLevel: overallRisk,
       timestamp: new Date().toISOString()
     });
@@ -255,6 +329,7 @@ exports.submitKioskSession = async (req, res) => {
     const encounter = new Encounter({
       token_number: tokenNumber,
       patient: {
+        patient_id: resolvedPatientId,
         full_name: fullName || 'Patient',
         age: Number(age) || 0,
         gender: gender || 'Male',
@@ -277,6 +352,7 @@ exports.submitKioskSession = async (req, res) => {
     return res.status(201).json({
       success: true,
       tokenNumber,
+      patientId: resolvedPatientId,
       qrCodeBase64,
       sessionId: encounter._id,
       triage: triageSummary
